@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Caja IJES SUBS</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+/* Layout: encabezado fijo con totales + filtros, lista de movimientos abajo; formulario en hoja deslizante */
+:root{
+  --bg:#f4f6f3; --surface:#ffffff; --surface-2:#eef1ec; --ink:#1c2420; --ink-soft:#5f6b63;
+  --line:#dde3dc; --accent:#2f7d4f; --accent-ink:#1c5234;
+  --pos:#2f7d4f; --pos-bg:#e4f1e8; --neg:#c0392b; --neg-bg:#fbeae7; --int:#b7791f; --int-bg:#fbf1dd;
+  --shadow:0 1px 3px rgba(20,40,30,.08),0 6px 20px rgba(20,40,30,.06);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#11160f; --surface:#1a211a; --surface-2:#222a21; --ink:#e7ede6; --ink-soft:#9aa89c;
+  --line:#2c362b; --accent:#5fb57e; --accent-ink:#8fd3a6;
+  --pos:#6cc489; --pos-bg:#17311f; --neg:#e07a6b; --neg-bg:#331a16; --int:#e0b25a; --int-bg:#332a14;
+  --shadow:0 1px 3px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35); color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#11160f; --surface:#1a211a; --surface-2:#222a21; --ink:#e7ede6; --ink-soft:#9aa89c;
+  --line:#2c362b; --accent:#5fb57e; --accent-ink:#8fd3a6;
+  --pos:#6cc489; --pos-bg:#17311f; --neg:#e07a6b; --neg-bg:#331a16; --int:#e0b25a; --int-bg:#332a14;
+  --shadow:0 1px 3px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35); color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);
+  font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  margin:0;line-height:1.45;-webkit-font-smoothing:antialiased}
+h1,h2,h3{margin:0;text-wrap:balance}
+.tnum{font-variant-numeric:tabular-nums}
+.wrap{max-width:720px;margin:0 auto;padding-inline:16px}
+
+/* Header */
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;
+  background:var(--surface);border-bottom:1px solid var(--line)}
+.top .wrap{padding-block:14px}
+.brand{display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.brand h1{font-size:1.15rem;letter-spacing:-.01em}
+.brand .sub{font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft)}
+.theme-btn{background:none;border:1px solid var(--line);color:var(--ink-soft);
+  border-radius:8px;padding:5px 9px;font-size:.78rem;cursor:pointer}
+
+/* Saldo grande + tiles */
+.saldo{margin-top:12px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.saldo .lbl{font-size:.74rem;text-transform:uppercase;letter-spacing:.09em;color:var(--ink-soft)}
+.saldo .val{font-size:1.9rem;font-weight:700;letter-spacing:-.02em}
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
+.tile{background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:9px 10px}
+.tile .t{font-size:.66rem;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft)}
+.tile .n{font-size:.98rem;font-weight:650;margin-top:2px}
+.tile.pos .n{color:var(--pos)} .tile.int .n{color:var(--int)} .tile.neg .n{color:var(--neg)}
+
+/* Toolbar */
+.toolbar{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;align-items:center}
+.toolbar input[type=search],.toolbar select{
+  background:var(--bg);border:1px solid var(--line);color:var(--ink);
+  border-radius:9px;padding:9px 11px;font-size:.9rem;font-family:inherit;min-width:0}
+.toolbar input[type=search]{flex:1 1 150px}
+.toolbar select{flex:0 0 auto}
+.btn{border:none;border-radius:9px;padding:9px 14px;font-size:.9rem;font-weight:600;
+  font-family:inherit;cursor:pointer;background:var(--accent);color:#fff;white-space:nowrap}
+.btn.ghost{background:transparent;border:1px solid var(--line);color:var(--ink)}
+.btn:active{transform:translateY(1px)}
+
+/* Estado persistencia */
+.saver{font-size:.72rem;color:var(--ink-soft);margin-top:8px;min-height:1em}
+.saver.err{color:var(--neg)}
+
+/* Lista */
+.list{padding-block:14px 90px}
+.mgroup{margin-top:18px}
+.mgroup:first-child{margin-top:4px}
+.mgroup .gh{display:flex;justify-content:space-between;align-items:baseline;
+  padding:0 2px 7px;border-bottom:1px solid var(--line);margin-bottom:8px}
+.mgroup .gh .gm{font-size:.82rem;font-weight:650;text-transform:capitalize;color:var(--ink)}
+.mgroup .gh .gt{font-size:.8rem;font-weight:650}
+.row{display:flex;align-items:center;gap:11px;padding:9px 6px;border-radius:10px;cursor:pointer}
+.row:hover{background:var(--surface-2)}
+.av{width:38px;height:38px;border-radius:50%;flex:0 0 auto;display:grid;place-items:center;
+  font-size:.74rem;font-weight:700;color:#fff;letter-spacing:.02em}
+.row .mid{flex:1 1 auto;min-width:0}
+.row .nm{font-size:.92rem;font-weight:550;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .dt{font-size:.74rem;color:var(--ink-soft);margin-top:1px}
+.row .amt{font-size:.95rem;font-weight:700;white-space:nowrap}
+.amt.pos{color:var(--pos)} .amt.neg{color:var(--neg)} .amt.int{color:var(--int)}
+.chip{display:inline-block;font-size:.6rem;text-transform:uppercase;letter-spacing:.05em;
+  padding:1px 6px;border-radius:5px;margin-left:7px;vertical-align:middle;font-weight:700}
+.chip.int{background:var(--int-bg);color:var(--int)}
+.chip.neg{background:var(--neg-bg);color:var(--neg)}
+.empty{text-align:center;color:var(--ink-soft);padding:40px 10px;font-size:.9rem}
+
+/* FAB */
+.fab{position:fixed;right:max(18px,env(safe-area-inset-right,0px));
+  bottom:calc(20px + env(safe-area-inset-bottom,0px));z-index:30;
+  width:56px;height:56px;border-radius:50%;border:none;background:var(--accent);color:#fff;
+  font-size:1.7rem;line-height:1;cursor:pointer;box-shadow:var(--shadow)}
+
+/* Hoja / modal */
+.backdrop{position:fixed;inset:0;background:rgba(10,20,14,.5);z-index:40;
+  display:flex;align-items:flex-end;justify-content:center}
+.sheet{background:var(--surface);width:100%;max-width:560px;
+  border-radius:16px 16px 0 0;box-shadow:var(--shadow);
+  padding:18px 18px calc(22px + env(safe-area-inset-bottom,0px));
+  max-height:92vh;overflow:auto}
+@media(min-width:560px){.backdrop{align-items:center}.sheet{border-radius:16px}}
+.sheet h2{font-size:1.05rem;margin-bottom:2px}
+.sheet .hint{font-size:.78rem;color:var(--ink-soft);margin-bottom:14px}
+.field{margin-bottom:13px}
+.field label{display:block;font-size:.74rem;text-transform:uppercase;letter-spacing:.05em;
+  color:var(--ink-soft);margin-bottom:5px}
+.field input,.field select{width:100%;background:var(--bg);border:1px solid var(--line);
+  color:var(--ink);border-radius:9px;padding:10px 11px;font-size:.95rem;font-family:inherit}
+.seg{display:flex;gap:6px}
+.seg label{flex:1;position:relative}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg span{display:block;text-align:center;padding:9px 4px;border:1px solid var(--line);
+  border-radius:9px;font-size:.84rem;font-weight:600;cursor:pointer;color:var(--ink-soft)}
+.seg input:checked+span{border-color:var(--accent);background:var(--pos-bg);color:var(--accent-ink)}
+.sheet-actions{display:flex;gap:9px;margin-top:6px}
+.sheet-actions .btn{flex:1;justify-content:center;text-align:center}
+.danger{background:var(--neg-bg);color:var(--neg);border:1px solid transparent}
+.row-del{margin-top:10px;width:100%;text-align:center}
+
+/* Informe */
+.rep-block{background:var(--surface-2);border:1px solid var(--line);border-radius:11px;padding:13px 14px;margin-bottom:11px}
+.rep-block .rl{font-size:.7rem;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-soft)}
+.rep-block .rv{font-size:1.5rem;font-weight:700;letter-spacing:-.02em;margin-top:8px}
+.rep-grid{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-bottom:11px}
+.rep-grid .rep-block{margin:0}
+.rep-block.ingreso .rv{color:var(--pos)} .rep-block.gasto .rv{color:var(--neg)}
+.rep-sub{font-size:.72rem;color:var(--ink-soft);margin-top:4px}
+.rep-ab{margin-top:4px}
+.rep-ab .rl{margin-bottom:8px}
+.rep-ab ul{list-style:none;margin:0;padding:0}
+.rep-ab li{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);font-size:.9rem}
+.rep-ab li:last-child{border-bottom:none}
+.rep-ab li .who{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rep-ab li .amt{font-weight:650;color:var(--pos);white-space:nowrap}
+.rep-none{font-size:.88rem;color:var(--ink-soft);padding:6px 0}
+</style>
+
+<div class="top">
+  <div class="wrap">
+    <div class="brand">
+      <div>
+        <h1>Caja IJES SUBS</h1>
+        <div class="sub">Caja de la iglesia · Versión PC (guarda en este navegador)</div>
+      </div>
+      <button class="theme-btn" id="themeBtn" type="button">Tema</button>
+    </div>
+
+    <div class="saldo">
+      <span class="lbl">Saldo total</span>
+      <span class="val tnum" id="saldoVal">$0,00</span>
+    </div>
+
+    <div class="tiles">
+      <div class="tile pos"><div class="t">Aportes</div><div class="n tnum" id="tAportes">$0</div></div>
+      <div class="tile int"><div class="t">Intereses</div><div class="n tnum" id="tInt">$0</div></div>
+      <div class="tile neg"><div class="t">Salidas</div><div class="n tnum" id="tSal">$0</div></div>
+    </div>
+
+    <div class="toolbar">
+      <input type="search" id="q" placeholder="Buscar persona o detalle…" autocomplete="off">
+      <select id="fTipo">
+        <option value="">Todos</option>
+        <option value="aporte">Aportes</option>
+        <option value="interes">Intereses</option>
+        <option value="salida">Salidas</option>
+      </select>
+      <button class="btn ghost" id="reportBtn" type="button">Informes</button>
+      <button class="btn ghost" id="exportBtn" type="button">CSV</button><button class="btn ghost" id="backupBtn" type="button">Respaldo</button><label class="btn ghost" style="cursor:pointer;margin:0">Importar<input type="file" id="importInput" accept=".json,application/json" hidden></label>
+    </div>
+    <div class="saver" id="saver"></div>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="list" id="list"></div>
+</div>
+
+<button class="fab" id="addBtn" type="button" aria-label="Agregar movimiento">+</button>
+
+<!-- datos embebidos: fuente de verdad del documento -->
+<script type="application/json" id="caja-data">[{"id":"m000","fecha":"2024-06-03T18:52","detalle":"Alfredo Fernando Ortigoza","monto":5000.0,"tipo":"aporte"},{"id":"m001","fecha":"2024-06-03T19:04","detalle":"De una cuenta tuya","monto":10000.0,"tipo":"aporte"},{"id":"m002","fecha":"2024-06-03T20:24","detalle":"FLORES, WALTER ALBERTO","monto":10000.0,"tipo":"aporte"},{"id":"m003","fecha":"2024-06-04T22:08","detalle":"Marcos Joel Basso","monto":5000.0,"tipo":"aporte"},{"id":"m004","fecha":"2024-06-05T20:32","detalle":"Erika Tamara Basso","monto":5000.0,"tipo":"aporte"},{"id":"m005","fecha":"2024-06-08T18:40","detalle":"KAYER, LIDIA ESTHER","monto":5000.0,"tipo":"aporte"},{"id":"m006","fecha":"2024-06-09T12:08","detalle":"Petrona De La Cruz Contreras","monto":5000.0,"tipo":"aporte"},{"id":"m007","fecha":"2024-06-09T19:59","detalle":"Hilda Lorena Pintos","monto":5000.0,"tipo":"aporte"},{"id":"m008","fecha":"2024-06-19T16:37","detalle":"Nilda Natalia Grunullu","monto":6000.0,"tipo":"aporte"},{"id":"m009","fecha":"2024-06-29T00:32","detalle":"Interes mensual ganado","monto":1.88,"tipo":"interes"},{"id":"m010","fecha":"2024-07-03T18:56","detalle":"KAYER, LIDIA ESTHER","monto":5000.0,"tipo":"aporte"},{"id":"m011","fecha":"2024-07-04T21:52","detalle":"Erika Tamara Basso","monto":5000.0,"tipo":"aporte"},{"id":"m012","fecha":"2024-07-13T11:04","detalle":"Alfredo Fernando Ortigoza","monto":5000.0,"tipo":"aporte"},{"id":"m013","fecha":"2024-07-13T11:38","detalle":"Nilda Natalia Grunullu","monto":5000.0,"tipo":"aporte"},{"id":"m014","fecha":"2024-07-13T11:44","detalle":"Marcos Joel Basso","monto":5000.0,"tipo":"aporte"},{"id":"m015","fecha":"2024-07-13T11:45","detalle":"De una cuenta tuya","monto":10000.0,"tipo":"aporte"},{"id":"m016","fecha":"2024-07-13T12:12","detalle":"Marcos Joel Basso","monto":5000.0,"tipo":"aporte"},{"id":"m017","fecha":"2024-07-13T14:51","detalle":"FLORES, WALTER ALBERTO","monto":10000.0,"tipo":"aporte"},{"id":"m018","fecha":"2024-07-14T10:50","detalle":"Petrona De La Cruz Contreras","monto":26000.0,"tipo":"aporte"},{"id":"m019","fecha":"2024-07-14T23:12","detalle":"Jorge Roberto Lickay","monto":-26000.0,"tipo":"salida"},{"id":"m020","fecha":"2024-07-16T21:54","detalle":"De una cuenta tuya","monto":5000.0,"tipo":"aporte"},{"id":"m021","fecha":"2024-07-31T23:57","detalle":"Interes mensual ganado","monto":3.8,"tipo":"interes"},{"id":"m022","fecha":"2024-08-03T11:04","detalle":"Marcos Joel Basso","monto":5000.0,"tipo":"aporte"},{"id":"m023","fecha":"2024-08-06T20:11","detalle":"Erika Tamara Basso","monto":5000.0,"tipo":"aporte"},{"id":"m024","fecha":"2024-08-07T19:04","detalle":"KAYER, LIDIA ESTHER","monto":5000.0,"tipo":"aporte"},{"id":"m025","fecha":"2024-08-10T16:02","detalle":"Marcos Joel Basso","monto":5000.0,"tipo":"aporte"},{"id":"m026","fecha":"2024-08-10T17:28","detalle":"Hilda Lorena Pintos","monto":5000.0,"tipo":"aporte"},{"id":"m027","fecha":"2024-08-10T17:39","detalle":"Nilda Natalia Grunullu","monto":5000.0,"tipo":"aporte"},{"id":"m028","fecha":"2024-08-10T18:11","detalle":"Alfredo Fernando Ortigoza","monto":5000.0,"tipo":"aporte"},{"id":"m029","fecha":"2024-08-11T07:59","detalle":"Jorge Roberto Lickay","monto":10000.0,"tipo":"aporte"},{"id":"m030","fecha":"2024-08-12T08:05","detalle":"Marcos Joel Basso","monto":-44000.0,"tipo":"salida"},{"id":"m031","fecha":"2024-08-13T20:07","detalle":"FLORES, WALTER ALBERTO","monto":10000.0,"tipo":"aporte"},{"id":"m032","fecha":"2024-08-15T08:59","detalle":"Hilda Lorena Pintos","monto":-66000.0,"tipo":"salida"},{"id":"m033","fecha":"2024-09-04T20:59","detalle":"KAYER, LIDIA ESTHER","monto":5000.0,"tipo":"aporte"},{"id":"m034","fecha":"2024-09-05T16:01","detalle":"Erika Tamara Basso","monto":5000.0,"tipo":"aporte"},{"id":"m035","fecha":"2024-09-05T16:03","detalle":"FLORES, WALTER ALBERTO","monto":10000.0,"tipo":"aporte"},{"id":"m036","fecha":"2024-09-05T18:04","detalle":"Alfredo Fernando Ortigoza","monto":5000.0,"tipo":"aporte"},{"id":"m037","fecha":"2024-09-14T14:18","detalle":"Marcos Joel Basso","monto":5000.0,"tipo":"aporte"},{"id":"m038","fecha":"2024-09-18T21:13","detalle":"Marcos Joel Basso","monto":-86000.0,"tipo":"salida"},{"id":"m039","fecha":"2024-09-18T21:23","detalle":"Hilda Lorena Pintos","monto":5000.0,"tipo":"aporte"},{"id":"m040","fecha":"2024-09-30T23:29","detalle":"Interes mensual ganado","monto":1.85,"tipo":"interes"},{"id":"m041","fecha":"2024-10-04T06:10","detalle":"Erika Tamara Basso","monto":5000.0,"tipo":"aporte"},{"id":"m042","fecha":"2024-10-05T11:16","detalle":"De una cuenta tuya","monto":5000.0,"tipo":"aporte"},{"id":"m043","fecha":"2024-10-05T11:17","detalle":"FLORES, WALTER ALBERTO","monto":10000.0,"tipo":"aporte"},{"id":"m044","fecha":"2024-10-05T11:19","detalle":"Hilda Lorena Pintos","monto":5000.0,"tipo":"aporte"},{"id":"m045","fecha":"2024-10-05T14:35","detalle":"De una cuenta tuya","monto":5000.0,"tipo":"aporte"},{"id":"m046","fecha":"2024-10-06T09:20","detalle":"KAYER, LIDIA ESTHER","monto":5000.0,"tipo":"aporte"},{"id":"m047","fecha":"2024-10-09T06:58","detalle":"Alfredo Fernando Ortigoza","monto":5000.0,"tipo":"aporte"},{"id":"m048","fecha":"2024-10-10T13:01","detalle":"Marcos Joel Basso","monto":5000.0,"tipo":"aporte"},{"id":"m049","fecha":"2024-10-11T14:44","detalle":"Marcos Joel Basso","monto":5000.0,"tipo":"aporte"},{"id":"m050","fecha":"2024-11-01T01:19","detalle":"Erika Tamara Basso","monto":5000.0,"tipo":"aporte"},{"id":"m051","fecha":"2024-11-01T07:10","detalle":"De una cuenta tuya","monto":5000.0,"tipo":"aporte"},{"id":"m052","fecha":"2024-11-12T09:49","detalle":"KAYER, LIDIA ESTHER","monto":5000.0,"tipo":"aporte"},{"id":"m053","fecha":"2024-11-15T11:28","detalle":"FLORES, WALTER ALBERTO","monto":10000.0,"tipo":"aporte"},{"id":"m054","fecha":"2024-11-15T11:33","detalle":"Marcos Joel Basso","monto":5000.0,"tipo":"aporte"},{"id":"m055","fecha":"2024-11-29T23:30","detalle":"Interes mensual ganado","monto":3.12,"tipo":"interes"},{"id":"m056","fecha":"2024-12-02T07:33","detalle":"Erika Tamara Basso","monto":5000.0,"tipo":"aporte"},{"id":"m057","fecha":"2024-12-08T12:46","detalle":"De una cuenta tuya","monto":5000.0,"tipo":"aporte"},{"id":"m058","fecha":"2024-12-12T12:19","detalle":"Pablo Hernan Ingravo","monto":-100000.0,"tipo":"salida"},{"id":"m059","fecha":"2024-12-15T11:58","detalle":"Marcos Joel Basso","monto":5000.0,"tipo":"aporte"},{"id":"m060","fecha":"2024-12-16T09:59","detalle":"Alfredo Fernando Ortigoza","monto":5000.0,"tipo":"aporte"},{"id":"m061","fecha":"2024-12-16T14:06","detalle":"De una cuenta tuya","monto":5000.0,"tipo":"aporte"},{"id":"m062","fecha":"2024-12-16T16:04","detalle":"FLORES, WALTER ALBERTO","monto":10000.0,"tipo":"aporte"},{"id":"m063","fecha":"2024-12-17T15:17","detalle":"De una cuenta tuya","monto":10000.0,"tipo":"aporte"},{"id":"m064","fecha":"2024-12-30T09:07","detalle":"KAYER, LIDIA ESTHER","monto":5000.0,"tipo":"aporte"},{"id":"m065","fecha":"2024-12-30T23:23","detalle":"Erika Tamara Basso","monto":5000.0,"tipo":"aporte"},{"id":"m066","fecha":"2024-12-31T00:03","detalle":"Interes mensual ganado","monto":2.41,"tipo":"interes"},{"id":"m067","fecha":"2025-01-03T18:40","detalle":"Hilda Lorena Pintos","monto":5000.0,"tipo":"aporte"},{"id":"m068","fecha":"2025-01-03T20:44","detalle":"Alfredo Fernando Ortigoza","monto":5000.0,"tipo":"aporte"},{"id":"m069","fecha":"2025-01-15T20:57","detalle":"Marcos Joel Basso","monto":5000.0,"tipo":"aporte"},{"id":"m070","fecha":"2025-01-31T23:29","detalle":"Interes mensual ganado","monto":2.62,"tipo":"interes"},{"id":"m071","fecha":"2025-02-01T10:53","detalle":"Erika Tamara Basso","monto":10000.0,"tipo":"aporte"},{"id":"m072","fecha":"2025-02-01T12:51","detalle":"KAYER, LIDIA ESTHER","monto":5000.0,"tipo":"aporte"},{"id":"m073","fecha":"2025-02-11T18:09","detalle":"FLORES, WALTER ALBERTO","monto":20000.0,"tipo":"aporte"},{"id":"m074","fecha":"2025-02-11T19:04","detalle":"De una cuenta tuya","monto":8000.0,"tipo":"aporte"},{"id":"m075","fecha":"2025-02-17T15:30","detalle":"Marcos Joel Basso","monto":5000.0,"tipo":"aporte"},{"id":"m076","fecha":"2025-02-17T15:36","detalle":"Marcos Joel Basso","monto":5000.0,"tipo":"aporte"},{"id":"m077","fecha":"2025-02-17T16:05","detalle":"Alfredo Fernando Ortigoza","monto":5000.0,"tipo":"aporte"},{"id":"m078","fecha":"2025-03-01T00:19","detalle":"Interes mensual ganado","monto":3.96,"tipo":"interes"},{"id":"m079","fecha":"2025-03-01T13:25","detalle":"Erika Tamara Basso","monto":10000.0,"tipo":"aporte"},{"id":"m080","fecha":"2025-03-01T13:35","detalle":"Marcos Joel Basso","monto":5000.0,"tipo":"aporte"},{"id":"m081","fecha":"2025-03-01T14:35","detalle":"FLORES, WALTER ALBERTO","monto":10000.0,"tipo":"aporte"},{"id":"m082","fecha":"2025-03-02T10:01","detalle":"KAYER, LIDIA ESTHER","monto":5000.0,"tipo":"aporte"},{"id":"m083","fecha":"2025-03-03T08:57","detalle":"De una cuenta tuya","monto":5000.0,"tipo":"aporte"},{"id":"m084","fecha":"2025-03-03T13:35","detalle":"Alfredo Fernando Ortigoza","monto":5000.0,"tipo":"aporte"},{"id":"m085","fecha":"2025-03-30T12:32","detalle":"KAYER, LIDIA ESTHER","monto":5000.0,"tipo":"aporte"},{"id":"m086","fecha":"2025-04-01T00:18","detalle":"Interes mensual ganado","monto":6.71,"tipo":"interes"},{"id":"m087","fecha":"2025-04-01T07:53","detalle":"Erika Tamara Basso","monto":10000.0,"tipo":"aporte"},{"id":"m088","fecha":"2025-04-01T10:59","detalle":"FLORES, WALTER ALBERTO","monto":10000.0,"tipo":"aporte"},{"id":"m089","fecha":"2025-04-03T22:15","detalle":"Marcos Joel Basso","monto":6000.0,"tipo":"aporte"},{"id":"m090","fecha":"2025-04-03T22:31","detalle":"Hilda Lorena Pintos","monto":5000.0,"tipo":"aporte"},{"id":"m091","fecha":"2025-04-06T12:35","detalle":"De una cuenta tuya","monto":5000.0,"tipo":"aporte"},{"id":"m092","fecha":"2025-04-07T19:47","detalle":"Alfredo Fernando Ortigoza","monto":5000.0,"tipo":"aporte"},{"id":"m093","fecha":"2025-04-18T13:55","detalle":"Petrona De La Cruz Contreras","monto":5000.0,"tipo":"aporte"},{"id":"m094","fecha":"2025-04-26T11:22","detalle":"De una cuenta tuya","monto":5000.0,"tipo":"aporte"},{"id":"m095","fecha":"2025-05-01T01:11","detalle":"Interes mensual ganado","monto":8.55,"tipo":"interes"},{"id":"m096","fecha":"2025-05-01T18:09","detalle":"Erika Tamara Basso","monto":10000.0,"tipo":"aporte"},{"id":"m097","fecha":"2025-05-01T19:18","detalle":"KAYER, LIDIA ESTHER","monto":5000.0,"tipo":"aporte"},{"id":"m098","fecha":"2025-05-01T22:14","detalle":"FLORES, WALTER ALBERTO","monto":10000.0,"tipo":"aporte"},{"id":"m099","fecha":"2025-05-01T22:15","detalle":"Marcos Joel Basso","monto":5000.0,"tipo":"aporte"},{"id":"m100","fecha":"2025-05-02T08:37","detalle":"Hilda Lorena Pintos","monto":5000.0,"tipo":"aporte"},{"id":"m101","fecha":"2025-05-02T08:47","detalle":"Alfredo Fernando Ortigoza","monto":5000.0,"tipo":"aporte"},{"id":"m102","fecha":"2025-05-30T22:54","detalle":"Devengado Cuentas Vista","monto":10.78,"tipo":"interes"},{"id":"m103","fecha":"2025-05-30T23:04","detalle":"Erika Tamara Basso","monto":10000.0,"tipo":"aporte"},{"id":"m104","fecha":"2025-06-02T10:41","detalle":"KAYER, LIDIA ESTHER","monto":5000.0,"tipo":"aporte"},{"id":"m105","fecha":"2025-06-02T10:46","detalle":"De una cuenta tuya","monto":5000.0,"tipo":"aporte"},{"id":"m106","fecha":"2025-06-03T20:09","detalle":"FLORES, WALTER ALBERTO","monto":10000.0,"tipo":"aporte"},{"id":"m107","fecha":"2025-06-03T20:39","detalle":"Alfredo Fernando Ortigoza","monto":5000.0,"tipo":"aporte"},{"id":"m108","fecha":"2025-06-05T13:27","detalle":"De una cuenta tuya","monto":5000.0,"tipo":"aporte"},{"id":"m109","fecha":"2025-06-13T20:57","detalle":"Marcos Joel Basso","monto":5000.0,"tipo":"aporte"},{"id":"m110","fecha":"2025-07-01T02:06","detalle":"Interes mensual ganado","monto":12.31,"tipo":"interes"},{"id":"m111","fecha":"2025-07-01T12:43","detalle":"Erika Tamara Basso","monto":10000.0,"tipo":"aporte"},{"id":"m112","fecha":"2025-07-01T20:00","detalle":"De una cuenta tuya","monto":10000.0,"tipo":"aporte"},{"id":"m113","fecha":"2025-07-01T20:01","detalle":"De una cuenta tuya","monto":5000.0,"tipo":"aporte"},{"id":"m114","fecha":"2025-07-02T10:12","detalle":"FLORES, WALTER ALBERTO","monto":10000.0,"tipo":"aporte"},{"id":"m115","fecha":"2025-07-30T19:48","detalle":"Marcos Joel Basso","monto":10000.0,"tipo":"aporte"},{"id":"m116","fecha":"2025-07-30T19:57","detalle":"Alfredo Fernando Ortigoza","monto":10000.0,"tipo":"aporte"},{"id":"m117","fecha":"2025-07-30T20:04","detalle":"De una cuenta tuya","monto":10000.0,"tipo":"aporte"},{"id":"m118","fecha":"2025-08-01T01:11","detalle":"Interes mensual ganado","monto":14.46,"tipo":"interes"},{"id":"m119","fecha":"2025-08-01T09:45","detalle":"BASSO, ERIKA TAMARA","monto":10000.0,"tipo":"aporte"},{"id":"m120","fecha":"2025-08-01T12:04","detalle":"KAYER, LIDIA ESTHER","monto":5000.0,"tipo":"aporte"},{"id":"m121","fecha":"2025-08-07T16:57","detalle":"FLORES, WALTER ALBERTO","monto":10000.0,"tipo":"aporte"},{"id":"m122","fecha":"2025-08-30T01:08","detalle":"Interes mensual ganado","monto":16.65,"tipo":"interes"},{"id":"m123","fecha":"2025-08-30T10:14","detalle":"Erika Tamara Basso","monto":10000.0,"tipo":"aporte"},{"id":"m124","fecha":"2025-08-30T12:02","detalle":"Alfredo Fernando Ortigoza","monto":5000.0,"tipo":"aporte"},{"id":"m125","fecha":"2025-09-02T12:21","detalle":"KAYER, LIDIA ESTHER","monto":5000.0,"tipo":"aporte"},{"id":"m126","fecha":"2025-09-02T12:23","detalle":"FLORES, WALTER ALBERTO","monto":10000.0,"tipo":"aporte"},{"id":"m127","fecha":"2025-09-02T12:47","detalle":"De una cuenta tuya","monto":5000.0,"tipo":"aporte"},{"id":"m128","fecha":"2025-10-01T00:05","detalle":"Erika Tamara Basso","monto":10000.0,"tipo":"aporte"},{"id":"m129","fecha":"2025-10-01T00:39","detalle":"Interes mensual ganado","monto":17.02,"tipo":"interes"},{"id":"m130","fecha":"2025-10-01T20:07","detalle":"KAYER, LIDIA ESTHER","monto":10000.0,"tipo":"aporte"},{"id":"m131","fecha":"2025-10-09T10:05","detalle":"De una cuenta tuya","monto":5000.0,"tipo":"aporte"},{"id":"m132","fecha":"2025-10-09T15:01","detalle":"Marcos Joel Basso","monto":15000.0,"tipo":"aporte"},{"id":"m133","fecha":"2025-10-09T20:13","detalle":"Marcos Joel Basso","monto":15000.0,"tipo":"aporte"},{"id":"m134","fecha":"2025-11-01T01:40","detalle":"Interes mensual ganado","monto":19.51,"tipo":"interes"},{"id":"m135","fecha":"2025-11-01T14:53","detalle":"Erika Tamara Basso","monto":10000.0,"tipo":"aporte"},{"id":"m136","fecha":"2025-11-16T10:09","detalle":"KAYER, LIDIA ESTHER","monto":10000.0,"tipo":"aporte"},{"id":"m137","fecha":"2025-11-18T13:06","detalle":"Marcos Joel Basso","monto":10000.0,"tipo":"aporte"},{"id":"m138","fecha":"2025-11-24T13:35","detalle":"Hilda Lorena Pintos","monto":-500000.0,"tipo":"salida"},{"id":"m139","fecha":"2025-11-29T00:17","detalle":"Interes mensual ganado","monto":12.49,"tipo":"interes"},{"id":"m140","fecha":"2025-11-30T00:38","detalle":"Erika Tamara Basso","monto":15000.0,"tipo":"aporte"},{"id":"m141","fecha":"2025-12-02T15:56","detalle":"FLORES, WALTER ALBERTO","monto":20000.0,"tipo":"aporte"},{"id":"m142","fecha":"2025-12-03T20:03","detalle":"Marcos Joel Basso","monto":10000.0,"tipo":"aporte"},{"id":"m143","fecha":"2025-12-03T20:04","detalle":"Marcos Joel Basso","monto":10000.0,"tipo":"aporte"},{"id":"m144","fecha":"2025-12-04T22:31","detalle":"De una cuenta tuya","monto":10000.0,"tipo":"aporte"},{"id":"m145","fecha":"2025-12-31T00:45","detalle":"Interes mensual ganado","monto":3.22,"tipo":"interes"},{"id":"m146","fecha":"2025-12-31T10:54","detalle":"Erika Tamara Basso","monto":15000.0,"tipo":"aporte"},{"id":"m147","fecha":"2026-01-05T10:12","detalle":"De una cuenta tuya","monto":20000.0,"tipo":"aporte"},{"id":"m148","fecha":"2026-01-15T22:18","detalle":"Marcos Joel Basso","monto":10000.0,"tipo":"aporte"},{"id":"m149","fecha":"2026-01-16T00:15","detalle":"FLORES, WALTER ALBERTO","monto":10000.0,"tipo":"aporte"},{"id":"m150","fecha":"2026-01-31T08:51","detalle":"Erika Tamara Basso","monto":10000.0,"tipo":"aporte"},{"id":"m151","fecha":"2026-01-31T22:05","detalle":"KAYER, LIDIA ESTHER","monto":10000.0,"tipo":"aporte"},{"id":"m152","fecha":"2026-02-18T21:43","detalle":"Marcos Joel Basso","monto":10000.0,"tipo":"aporte"},{"id":"m153","fecha":"2026-02-27T23:59","detalle":"Interes mensual ganado","monto":6.06,"tipo":"interes"},{"id":"m154","fecha":"2026-02-28T14:10","detalle":"Erika Tamara Basso","monto":15000.0,"tipo":"aporte"},{"id":"m155","fecha":"2026-03-10T11:19","detalle":"De una cuenta tuya","monto":10000.0,"tipo":"aporte"},{"id":"m156","fecha":"2026-03-10T11:21","detalle":"Marcos Joel Basso","monto":10000.0,"tipo":"aporte"},{"id":"m157","fecha":"2026-03-15T13:34","detalle":"Marcos Joel Basso","monto":10000.0,"tipo":"aporte"},{"id":"m158","fecha":"2026-03-31T23:02","detalle":"Pago de Interes","monto":8.43,"tipo":"interes"},{"id":"m159","fecha":"2026-04-01T14:49","detalle":"FLORES, WALTER ALBERTO","monto":20000.0,"tipo":"aporte"},{"id":"m160","fecha":"2026-04-01T16:52","detalle":"De una cuenta tuya","monto":10000.0,"tipo":"aporte"},{"id":"m161","fecha":"2026-04-01T19:52","detalle":"KAYER, LIDIA ESTHER","monto":10000.0,"tipo":"aporte"},{"id":"m162","fecha":"2026-04-01T23:40","detalle":"Erika Tamara Basso","monto":15000.0,"tipo":"aporte"},{"id":"m163","fecha":"2026-05-01T00:27","detalle":"Erika Tamara Basso","monto":15000.0,"tipo":"aporte"},{"id":"m164","fecha":"2026-05-01T03:21","detalle":"Interes mensual ganado","monto":10.75,"tipo":"interes"},{"id":"m165","fecha":"2026-05-05T16:06","detalle":"KAYER, LIDIA ESTHER","monto":10000.0,"tipo":"aporte"},{"id":"m166","fecha":"2026-05-13T12:14","detalle":"Marcos Joel Basso","monto":10000.0,"tipo":"aporte"},{"id":"m167","fecha":"2026-05-13T12:22","detalle":"FLORES, WALTER ALBERTO","monto":10000.0,"tipo":"aporte"},{"id":"m168","fecha":"2026-05-18T11:26","detalle":"De una cuenta tuya","monto":10000.0,"tipo":"aporte"},{"id":"m169","fecha":"2026-05-30T02:53","detalle":"Interes mensual ganado","monto":12.92,"tipo":"interes"},{"id":"m170","fecha":"2026-05-31T17:33","detalle":"KAYER, LIDIA ESTHER","monto":10000.0,"tipo":"aporte"},{"id":"m171","fecha":"2026-06-01T10:28","detalle":"De una cuenta tuya","monto":10000.0,"tipo":"aporte"},{"id":"m172","fecha":"2026-06-01T19:07","detalle":"Erika Tamara Basso","monto":15000.0,"tipo":"aporte"},{"id":"m173","fecha":"2026-07-01T03:32","detalle":"Interes mensual ganado","monto":14.46,"tipo":"interes"},{"id":"m174","fecha":"2026-07-02T14:28","detalle":"Erika Tamara Basso","monto":15000.0,"tipo":"aporte"},{"id":"m175","fecha":"2026-07-05T14:36","detalle":"De una cuenta tuya","monto":10000.0,"tipo":"aporte"},{"id":"m176","fecha":"2026-08-01T00:00","detalle":"Erika Tamara Basso","monto":15000.0,"tipo":"aporte"},{"id":"m177","fecha":"2026-08-01T02:48","detalle":"Interes mensual ganado","monto":15.84,"tipo":"interes"},{"id":"m178","fecha":"2026-08-02T16:55","detalle":"KAYER, LIDIA ESTHER","monto":10000.0,"tipo":"aporte"}]</script>
+
+<script>
+(function(){
+  "use strict";
+  var FMT = new Intl.NumberFormat("es-AR",{minimumFractionDigits:2,maximumFractionDigits:2});
+  var FMT0 = new Intl.NumberFormat("es-AR",{minimumFractionDigits:0,maximumFractionDigits:0});
+  var MESES=["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+  var AV_COLORS=["#6b8e9e","#9e6b8e","#8e9e6b","#9e8a6b","#6b9e86","#866b9e","#9e6b6b","#6b9e9e"];
+
+  // ---- estado ----
+  // Versión local: si ya hay datos guardados en esta PC, esos mandan.
+  // La primera vez (sin datos guardados) cargamos los movimientos iniciales embebidos.
+  var state = [];
+  try{ var ls=localStorage.getItem("caja_ijes"); if(ls) state=JSON.parse(ls)||[]; }catch(e){}
+  if(!state.length){
+    try{ state = JSON.parse(document.getElementById("caja-data").textContent) || []; }catch(e){ state=[]; }
+  }
+
+  var el = function(id){return document.getElementById(id);};
+  var editingId = null;
+
+  function money(n){ return "$"+FMT.format(n); }
+  function money0(n){ var s=FMT0.format(Math.abs(n)); return (n<0?"-$":"$")+s; }
+  function tipoOf(r){ return r.tipo || (r.monto<0?"salida":"aporte"); }
+  function initials(name){
+    var p=name.replace(/[,]/g,"").trim().split(/\s+/).filter(Boolean);
+    if(!p.length) return "?";
+    if(p.length===1) return p[0].slice(0,2).toUpperCase();
+    return (p[0][0]+p[p.length-1][0]).toUpperCase();
+  }
+  function colorFor(name){
+    var h=0; for(var i=0;i<name.length;i++){h=(h*31+name.charCodeAt(i))>>>0;}
+    return AV_COLORS[h%AV_COLORS.length];
+  }
+  function fmtDate(iso){
+    var d=new Date(iso); if(isNaN(d)) return iso;
+    var dd=("0"+d.getDate()).slice(-2), mm=("0"+(d.getMonth()+1)).slice(-2);
+    var hh=("0"+d.getHours()).slice(-2), mi=("0"+d.getMinutes()).slice(-2);
+    return dd+"/"+mm+"/"+d.getFullYear()+" "+hh+":"+mi;
+  }
+  function monthKey(iso){ var d=new Date(iso); return d.getFullYear()+"-"+("0"+(d.getMonth()+1)).slice(-2); }
+  function monthLabel(iso){ var d=new Date(iso); return MESES[d.getMonth()]+" "+d.getFullYear(); }
+
+  // ---- totales ----
+  function totals(rows){
+    var t={aporte:0,interes:0,salida:0,saldo:0};
+    rows.forEach(function(r){ var k=tipoOf(r); t[k]=(t[k]||0)+r.monto; t.saldo+=r.monto; });
+    return t;
+  }
+
+  // ---- render ----
+  function render(){
+    var q=(el("q").value||"").toLowerCase().trim();
+    var ft=el("fTipo").value;
+
+    var all = state.slice().sort(function(a,b){ return a.fecha<b.fecha?1:(a.fecha>b.fecha?-1:0); });
+    var filtered = all.filter(function(r){
+      if(ft && tipoOf(r)!==ft) return false;
+      if(q && (r.detalle||"").toLowerCase().indexOf(q)<0) return false;
+      return true;
+    });
+
+    // totales (sobre TODO, no sobre el filtro)
+    var t=totals(state);
+    el("saldoVal").textContent = money(t.saldo);
+    el("tAportes").textContent = money0(t.aporte);
+    el("tInt").textContent = money(t.interes);
+    el("tSal").textContent = money0(t.salida);
+
+    var list=el("list"); list.innerHTML="";
+    if(!filtered.length){
+      list.innerHTML='<div class="empty">No hay movimientos que coincidan.</div>';
+      return;
+    }
+    var curKey=null, groupEl=null;
+    filtered.forEach(function(r){
+      var k=monthKey(r.fecha);
+      if(k!==curKey){
+        curKey=k;
+        groupEl=document.createElement("div"); groupEl.className="mgroup";
+        var sub=all.filter(function(x){return monthKey(x.fecha)===k;});
+        var gt=sub.reduce(function(s,x){return s+x.monto;},0);
+        var gh=document.createElement("div"); gh.className="gh";
+        gh.innerHTML='<span class="gm">'+monthLabel(r.fecha)+'</span>'+
+                     '<span class="gt tnum" style="color:'+(gt<0?'var(--neg)':'var(--pos)')+'">'+
+                     (gt<0?'':'+')+money(gt)+'</span>';
+        groupEl.appendChild(gh);
+        list.appendChild(groupEl);
+      }
+      var tp=tipoOf(r);
+      var row=document.createElement("div"); row.className="row"; row.dataset.id=r.id;
+      var isInt = tp==="interes";
+      var av = isInt
+        ? '<div class="av" style="background:var(--int)">%</div>'
+        : '<div class="av" style="background:'+colorFor(r.detalle)+'">'+initials(r.detalle)+'</div>';
+      var chip = isInt?'<span class="chip int">interés</span>':(tp==="salida"?'<span class="chip neg">salida</span>':'');
+      var amtCls = isInt?"int":(r.monto<0?"neg":"pos");
+      var sign = r.monto<0?"":"+";
+      row.innerHTML = av+
+        '<div class="mid"><div class="nm">'+escapeHtml(r.detalle)+chip+'</div>'+
+        '<div class="dt tnum">'+fmtDate(r.fecha)+'</div></div>'+
+        '<div class="amt tnum '+amtCls+'">'+sign+money(r.monto)+'</div>';
+      row.addEventListener("click",function(){ openForm(r.id); });
+      groupEl.appendChild(row);
+    });
+  }
+  function escapeHtml(s){ return (s||"").replace(/[&<>"]/g,function(c){
+    return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
+
+  // ---- persistencia (versión local: guarda en este navegador) ----
+  function saveLocal(){ try{ localStorage.setItem("caja_ijes", JSON.stringify(state)); }catch(e){} }
+  function persist(){
+    saveLocal();
+    setSaver("Guardado en esta PC ✓", false);
+  }
+  function setSaver(msg,isErr){ var s=el("saver"); s.textContent=msg; s.className="saver"+(isErr?" err":""); }
+
+  // ---- formulario ----
+  function openForm(id){
+    editingId = id||null;
+    var r = id ? state.filter(function(x){return x.id===id;})[0] : null;
+    var now=new Date(); now.setMinutes(now.getMinutes()-now.getTimezoneOffset());
+    var nowLocal=now.toISOString().slice(0,16);
+    var tp = r?tipoOf(r):"aporte";
+    var monto = r?Math.abs(r.monto):"";
+    var bd=document.createElement("div"); bd.className="backdrop"; bd.id="backdrop";
+    bd.innerHTML =
+      '<div class="sheet" role="dialog" aria-modal="true">'+
+        '<h2>'+(r?"Editar movimiento":"Nuevo movimiento")+'</h2>'+
+        '<div class="hint">'+(r?"Modificá los datos o eliminá el movimiento.":"Cargá un aporte, un interés o una salida.")+'</div>'+
+        '<div class="field"><label>Tipo</label><div class="seg">'+
+          seg("tipo","aporte","Aporte",tp)+seg("tipo","interes","Interés",tp)+seg("tipo","salida","Salida",tp)+
+        '</div></div>'+
+        '<div class="field"><label>Persona / Detalle</label>'+
+          '<input id="fDetalle" type="text" placeholder="Ej: Marcos Joel Basso" value="'+(r?escapeHtml(r.detalle).replace(/"/g,"&quot;"):"")+'"></div>'+
+        '<div class="field"><label>Monto (en pesos, sin signo)</label>'+
+          '<input id="fMonto" type="number" inputmode="decimal" step="0.01" min="0" placeholder="5000" value="'+monto+'"></div>'+
+        '<div class="field"><label>Fecha y hora</label>'+
+          '<input id="fFecha" type="datetime-local" value="'+(r?r.fecha:nowLocal)+'"></div>'+
+        '<div class="sheet-actions">'+
+          '<button class="btn ghost" id="cancelBtn" type="button">Cancelar</button>'+
+          '<button class="btn" id="saveBtn" type="button">'+(r?"Guardar":"Agregar")+'</button>'+
+        '</div>'+
+        (r?'<button class="btn danger row-del" id="delBtn" type="button">Eliminar movimiento</button>':'')+
+      '</div>';
+    document.body.appendChild(bd);
+    bd.addEventListener("click",function(e){ if(e.target===bd) closeForm(); });
+    el("cancelBtn").addEventListener("click",closeForm);
+    el("saveBtn").addEventListener("click",submitForm);
+    if(el("delBtn")) el("delBtn").addEventListener("click",function(){ delMov(id); });
+    var di=el("fDetalle"); if(di && !r) di.focus();
+  }
+  function seg(name,val,label,cur){
+    return '<label><input type="radio" name="'+name+'" value="'+val+'"'+(cur===val?" checked":"")+
+           '><span>'+label+'</span></label>';
+  }
+  function closeForm(){ var bd=el("backdrop"); if(bd) bd.remove(); editingId=null; }
+
+  function submitForm(){
+    var detalle=(el("fDetalle").value||"").trim();
+    var montoRaw=el("fMonto").value;
+    var fecha=el("fFecha").value;
+    var tp=(document.querySelector('input[name="tipo"]:checked')||{}).value||"aporte";
+    if(!detalle){ el("fDetalle").focus(); return; }
+    var monto=parseFloat(montoRaw);
+    if(isNaN(monto)||monto<=0){ el("fMonto").focus(); return; }
+    if(!fecha){ el("fFecha").focus(); return; }
+    var signed = tp==="salida" ? -Math.abs(monto) : Math.abs(monto);
+    if(editingId){
+      state.forEach(function(r){ if(r.id===editingId){ r.detalle=detalle; r.monto=signed; r.fecha=fecha; r.tipo=tp; } });
+    }else{
+      state.push({id:"m"+Date.now().toString(36)+Math.floor(Math.random()*1000), detalle:detalle, monto:signed, fecha:fecha, tipo:tp});
+    }
+    closeForm(); render(); persist();
+  }
+  function delMov(id){
+    state = state.filter(function(r){return r.id!==id;});
+    closeForm(); render(); persist();
+  }
+
+  // ---- exportar / importar (versión local) ----
+  function buildCsv(){
+    var rows=state.slice().sort(function(a,b){return a.fecha<b.fecha?-1:1;});
+    var lines=["Fecha;Detalle;Tipo;Monto"];
+    rows.forEach(function(r){
+      var d=fmtDate(r.fecha);
+      var det='"'+(r.detalle||"").replace(/"/g,'""')+'"';
+      lines.push([d,det,tipoOf(r),String(r.monto).replace(".",",")].join(";"));
+    });
+    var t=totals(state);
+    lines.push("");
+    lines.push("TOTAL APORTES;;;"+String(t.aporte).replace(".",","));
+    lines.push("TOTAL INTERESES;;;"+String(t.interes).replace(".",","));
+    lines.push("TOTAL SALIDAS;;;"+String(t.salida).replace(".",","));
+    lines.push("SALDO;;;"+String(t.saldo).replace(".",","));
+    return "﻿"+lines.join("\r\n");
+  }
+  function exportCsv(){
+    try{
+      var blob=new Blob([buildCsv()],{type:"text/csv;charset=utf-8"});
+      var url=URL.createObjectURL(blob);
+      var a=document.createElement("a");
+      var hoy=new Date().toISOString().slice(0,10);
+      a.href=url; a.download="caja_ijes_"+hoy+".csv";
+      document.body.appendChild(a); a.click();
+      setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); },100);
+      setSaver("CSV exportado ✓",false);
+    }catch(e){ setSaver("No se pudo exportar",true); }
+  }
+  // respaldo completo en JSON (recomendado para mover a otra PC)
+  function exportJson(){
+    try{
+      var blob=new Blob([JSON.stringify(state,null,1)],{type:"application/json"});
+      var url=URL.createObjectURL(blob);
+      var a=document.createElement("a");
+      var hoy=new Date().toISOString().slice(0,10);
+      a.href=url; a.download="caja_ijes_respaldo_"+hoy+".json";
+      document.body.appendChild(a); a.click();
+      setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); },100);
+      setSaver("Respaldo guardado ✓",false);
+    }catch(e){ setSaver("No se pudo guardar el respaldo",true); }
+  }
+  function importJson(file){
+    var rd=new FileReader();
+    rd.onload=function(){
+      try{
+        var arr=JSON.parse(rd.result);
+        if(!Array.isArray(arr)) throw 0;
+        // normalizar
+        arr=arr.filter(function(r){return r&&typeof r.monto==="number"&&r.fecha;});
+        arr.forEach(function(r){ if(!r.id) r.id="m"+Date.now().toString(36)+Math.floor(Math.random()*1e4); if(!r.tipo) r.tipo=(r.monto<0?"salida":"aporte"); });
+        state=arr; render(); persist();
+        setSaver("Respaldo importado ✓ ("+arr.length+" movimientos)",false);
+      }catch(e){ setSaver("Archivo de respaldo inválido",true); }
+    };
+    rd.readAsText(file);
+  }
+
+  // ---- informe ----
+  function lastMonthKey(){
+    // mes calendario más reciente con movimientos
+    var keys = state.map(function(r){return monthKey(r.fecha);});
+    if(!keys.length) return null;
+    keys.sort();
+    return keys[keys.length-1];
+  }
+  function openReport(){
+    var t=totals(state);
+    var lmk=lastMonthKey();
+    var inMonth = lmk ? state.filter(function(r){return monthKey(r.fecha)===lmk;}) : [];
+    var ingresos = inMonth.filter(function(r){return r.monto>0;}).reduce(function(s,r){return s+r.monto;},0);
+    var gastos = inMonth.filter(function(r){return r.monto<0;}).reduce(function(s,r){return s+r.monto;},0);
+    // abonaron ese mes = aportes (no intereses) positivos
+    var abonaron = inMonth.filter(function(r){return tipoOf(r)==="aporte" && r.monto>0;})
+                          .sort(function(a,b){return b.monto-a.monto;});
+    var mesTxt = lmk ? (function(){var d=new Date(lmk+"-01T00:00");return MESES[d.getMonth()]+" "+d.getFullYear();})() : "—";
+    var hoy=new Date();
+    var hoyTxt=("0"+hoy.getDate()).slice(-2)+"/"+("0"+(hoy.getMonth()+1)).slice(-2)+"/"+hoy.getFullYear();
+
+    var abList = abonaron.length
+      ? '<ul>'+abonaron.map(function(r){
+          return '<li><span class="who">'+escapeHtml(r.detalle)+'</span><span class="amt tnum">'+money(r.monto)+'</span></li>';
+        }).join('')+'</ul>'
+      : '<div class="rep-none">Nadie registró aportes en '+mesTxt+'.</div>';
+
+    var bd=document.createElement("div"); bd.className="backdrop"; bd.id="backdrop";
+    bd.innerHTML =
+      '<div class="sheet" role="dialog" aria-modal="true">'+
+        '<h2>Informe de caja</h2>'+
+        '<div class="hint">Al '+hoyTxt+' · Último mes con movimientos: '+mesTxt+'</div>'+
+        '<div class="rep-block">'+
+          '<div class="rl">Total en caja (saldo)</div>'+
+          '<div class="rv tnum">'+money(t.saldo)+'</div>'+
+        '</div>'+
+        '<div class="rep-grid">'+
+          '<div class="rep-block ingreso"><div class="rl">Ingresó en '+mesTxt+'</div>'+
+            '<div class="rv tnum">'+money(ingresos)+'</div></div>'+
+          '<div class="rep-block gasto"><div class="rl">Se gastó en '+mesTxt+'</div>'+
+            '<div class="rv tnum">'+money(gastos)+'</div></div>'+
+        '</div>'+
+        '<div class="rep-block rep-ab">'+
+          '<div class="rl">Abonaron en '+mesTxt+' ('+abonaron.length+')</div>'+
+          abList+
+        '</div>'+
+        '<div class="sheet-actions">'+
+          '<button class="btn ghost" id="repPdfBtn" type="button">Descargar PDF</button>'+
+          '<button class="btn" id="repCloseBtn" type="button">Cerrar</button>'+
+        '</div>'+
+      '</div>';
+    document.body.appendChild(bd);
+    bd.addEventListener("click",function(e){ if(e.target===bd) closeForm(); });
+    el("repCloseBtn").addEventListener("click",closeForm);
+    el("repPdfBtn").addEventListener("click",function(){
+      reportPdf({saldo:t.saldo, aporte:t.aporte, interes:t.interes, salida:t.salida,
+                 mesTxt:mesTxt, hoyTxt:hoyTxt, ingresos:ingresos, gastos:gastos, abonaron:abonaron});
+    });
+  }
+
+  function reportPdf(d){
+    var JS = window.jspdf && window.jspdf.jsPDF;
+    if(!JS){ setSaver("No se pudo cargar el generador de PDF",true); return; }
+    var doc=new JS({unit:"pt",format:"a4"});
+    var W=doc.internal.pageSize.getWidth();
+    var M=48, y=56;
+    function line(txt,size,style,color,gap){
+      doc.setFont("helvetica",style||"normal"); doc.setFontSize(size||11);
+      if(color) doc.setTextColor(color[0],color[1],color[2]); else doc.setTextColor(28,36,32);
+      doc.text(txt,M,y); y+=(gap||size*1.5);
+    }
+    function right(txt,size,style,color){
+      doc.setFont("helvetica",style||"normal"); doc.setFontSize(size||11);
+      if(color) doc.setTextColor(color[0],color[1],color[2]); else doc.setTextColor(28,36,32);
+      doc.text(txt,W-M,y,{align:"right"});
+    }
+    // encabezado
+    doc.setFillColor(47,125,79); doc.rect(0,0,W,8,"F");
+    line("Caja IJES SUBS",20,"bold",[28,82,52],30);
+    line("Informe de caja",13,"bold",null,18);
+    line("Al "+d.hoyTxt+"  ·  Último mes con movimientos: "+d.mesTxt,10,"normal",[95,107,99],26);
+
+    // saldo
+    doc.setDrawColor(221,227,220); doc.setLineWidth(1);
+    doc.line(M,y-6,W-M,y-6); y+=14;
+    line("TOTAL EN CAJA (SALDO)",9,"bold",[95,107,99],24);
+    line("$"+FMT.format(d.saldo),22,"bold",[28,82,52],30);
+
+    doc.line(M,y-6,W-M,y-6); y+=14;
+    // ingreso / gasto del mes
+    line("MOVIMIENTO DE "+d.mesTxt.toUpperCase(),9,"bold",[95,107,99],18);
+    var yRow=y;
+    doc.setFont("helvetica","normal"); doc.setFontSize(11); doc.setTextColor(28,36,32);
+    doc.text("Ingresó en el mes",M,y);
+    doc.setFont("helvetica","bold"); doc.setTextColor(47,125,79);
+    doc.text("$"+FMT.format(d.ingresos),W-M,y,{align:"right"}); y+=20;
+    doc.setFont("helvetica","normal"); doc.setTextColor(28,36,32);
+    doc.text("Se gastó en el mes",M,y);
+    doc.setFont("helvetica","bold"); doc.setTextColor(192,57,43);
+    doc.text("$"+FMT.format(d.gastos),W-M,y,{align:"right"}); y+=30;
+
+    doc.setDrawColor(221,227,220); doc.line(M,y-6,W-M,y-6); y+=14;
+    // abonaron
+    line("ABONARON EN "+d.mesTxt.toUpperCase()+" ("+d.abonaron.length+")",9,"bold",[95,107,99],18);
+    if(d.abonaron.length){
+      d.abonaron.forEach(function(r){
+        if(y>780){ doc.addPage(); y=56; }
+        doc.setFont("helvetica","normal"); doc.setFontSize(11); doc.setTextColor(28,36,32);
+        doc.text(String(r.detalle).slice(0,54),M,y);
+        doc.setFont("helvetica","bold"); doc.setTextColor(47,125,79);
+        doc.text("$"+FMT.format(r.monto),W-M,y,{align:"right"});
+        y+=19;
+        doc.setDrawColor(238,241,236); doc.line(M,y-7,W-M,y-7);
+      });
+    } else {
+      line("Nadie registró aportes en "+d.mesTxt+".",10,"normal",[95,107,99],18);
+    }
+    // pie
+    doc.setFont("helvetica","italic"); doc.setFontSize(8); doc.setTextColor(150,160,152);
+    doc.text("Generado el "+d.hoyTxt+" · Caja IJES SUBS",M,820);
+
+    var fname="informe_caja_"+new Date().toISOString().slice(0,10)+".pdf";
+    // En artifact: usar capability downloads. En local: <a download>.
+    if(window.claude && window.claude.use){
+      var blob=doc.output("blob");
+      window.claude.use("downloads").then(function(dl){
+        if(!dl){ localPdfFallback(doc,fname); return; }
+        dl.save({filename:fname, data:blob}).then(function(){ setSaver("PDF descargado ✓",false); })
+          .catch(function(err){ if(err&&err.code==="declined"){setSaver("",false);return;} setSaver("No se pudo descargar el PDF",true); });
+      }).catch(function(){ localPdfFallback(doc,fname); });
+    } else {
+      localPdfFallback(doc,fname);
+    }
+  }
+  function localPdfFallback(doc,fname){
+    try{ doc.save(fname); setSaver("PDF descargado ✓",false); }
+    catch(e){ setSaver("No se pudo generar el PDF",true); }
+  }
+
+  // ---- tema ----
+  function initTheme(){
+    var saved; try{ saved=localStorage.getItem("caja_theme"); }catch(e){}
+    if(saved) document.documentElement.setAttribute("data-theme",saved);
+    el("themeBtn").addEventListener("click",function(){
+      var cur=document.documentElement.getAttribute("data-theme");
+      var isDark = cur==="dark" || (!cur && window.matchMedia("(prefers-color-scheme:dark)").matches);
+      var next=isDark?"light":"dark";
+      document.documentElement.setAttribute("data-theme",next);
+      try{ localStorage.setItem("caja_theme",next); }catch(e){}
+    });
+  }
+
+  // ---- init ----
+  el("q").addEventListener("input",render);
+  el("fTipo").addEventListener("change",render);
+  el("addBtn").addEventListener("click",function(){ openForm(null); });
+  el("reportBtn").addEventListener("click",openReport);
+  el("exportBtn").addEventListener("click",exportCsv);
+  el("backupBtn").addEventListener("click",exportJson);
+  el("importInput").addEventListener("change",function(e){ if(e.target.files[0]) importJson(e.target.files[0]); e.target.value=""; });
+  initTheme();
+  render();
+})();
+</script>
+
+<!-- datos embebidos: fuente de verdad del documento -->
+<script type="application/json" id="caja-data">[{"id":"m000","fecha":"2024-06-03T18:52","detalle":"Alfredo Fernando Ortigoza","monto":5000.0,"tipo":"aporte"},{"id":"m001","fecha":"2024-06-03T19:04","detalle":"De una cuenta tuya","monto":10000.0,"tipo":"aporte"},{"id":"m002","fecha":"2024-06-03T20:24","detalle":"FLORES, WALTER ALBERTO","monto":10000.0,"tipo":"aporte"},{"id":"m003","fecha":"2024-06-04T22:08","detalle":"Marcos Joel Basso","monto":5000.0,"tipo":"aporte"},{"id":"m004","fecha":"2024-06-05T20:32","detalle":"Erika Tamara Basso","monto":5000.0,"tipo":"aporte"},{"id":"m005","fecha":"2024-06-08T18:40","detalle":"KAYER, LIDIA ESTHER","monto":5000.0,"tipo":"aporte"},{"id":"m006","fecha":"2024-06-09T12:08","detalle":"Petrona De La Cruz Contreras","monto":5000.0,"tipo":"aporte"},{"id":"m007","fecha":"2024-06-09T19:59","detalle":"Hilda Lorena Pintos","monto":5000.0,"tipo":"aporte"},{"id":"m008","fecha":"2024-06-19T16:37","detalle":"Nilda Natalia Grunullu","monto":6000.0,"tipo":"aporte"},{"id":"m009","fecha":"2024-06-29T00:32","detalle":"Interes mensual ganado","monto":1.88,"tipo":"interes"},{"id":"m010","fecha":"2024-07-03T18:56","detalle":"KAYER, LIDIA ESTHER","monto":5000.0,"tipo":"aporte"},{"id":"m011","fecha":"2024-07-04T21:52","detalle":"Erika Tamara Basso","monto":5000.0,"tipo":"aporte"},{"id":"m012","fecha":"2024-07-13T11:04","detalle":"Alfredo Fernando Ortigoza","monto":5000.0,"tipo":"aporte"},{"id":"m013","fecha":"2024-07-13T11:38","detalle":"Nilda Natalia Grunullu","monto":5000.0,"tipo":"aporte"},{"id":"m014","fecha":"2024-07-13T11:44","detalle":"Marcos Joel Basso","monto":5000.0,"tipo":"aporte"},{"id":"m015","fecha":"2024-07-13T11:45","detalle":"De una cuenta tuya","monto":10000.0,"tipo":"aporte"},{"id":"m016","fecha":"2024-07-13T12:12","detalle":"Marcos Joel Basso","monto":5000.0,"tipo":"aporte"},{"id":"m017","fecha":"2024-07-13T14:51","detalle":"FLORES, WALTER ALBERTO","monto":10000.0,"tipo":"aporte"},{"id":"m018","fecha":"2024-07-14T10:50","detalle":"Petrona De La Cruz Contreras","monto":26000.0,"tipo":"aporte"},{"id":"m019","fecha":"2024-07-14T23:12","detalle":"Jorge Roberto Lickay","monto":-26000.0,"tipo":"salida"},{"id":"m020","fecha":"2024-07-16T21:54","detalle":"De una cuenta tuya","monto":5000.0,"tipo":"aporte"},{"id":"m021","fecha":"2024-07-31T23:57","detalle":"Interes mensual ganado","monto":3.8,"tipo":"interes"},{"id":"m022","fecha":"2024-08-03T11:04","detalle":"Marcos Joel Basso","monto":5000.0,"tipo":"aporte"},{"id":"m023","fecha":"2024-08-06T20:11","detalle":"Erika Tamara Basso","monto":5000.0,"tipo":"aporte"},{"id":"m024","fecha":"2024-08-07T19:04","detalle":"KAYER, LIDIA ESTHER","monto":5000.0,"tipo":"aporte"},{"id":"m025","fecha":"2024-08-10T16:02","detalle":"Marcos Joel Basso","monto":5000.0,"tipo":"aporte"},{"id":"m026","fecha":"2024-08-10T17:28","detalle":"Hilda Lorena Pintos","monto":5000.0,"tipo":"aporte"},{"id":"m027","fecha":"2024-08-10T17:39","detalle":"Nilda Natalia Grunullu","monto":5000.0,"tipo":"aporte"},{"id":"m028","fecha":"2024-08-10T18:11","detalle":"Alfredo Fernando Ortigoza","monto":5000.0,"tipo":"aporte"},{"id":"m029","fecha":"2024-08-11T07:59","detalle":"Jorge Roberto Lickay","monto":10000.0,"tipo":"aporte"},{"id":"m030","fecha":"2024-08-12T08:05","detalle":"Marcos Joel Basso","monto":-44000.0,"tipo":"salida"},{"id":"m031","fecha":"2024-08-13T20:07","detalle":"FLORES, WALTER ALBERTO","monto":10000.0,"tipo":"aporte"},{"id":"m032","fecha":"2024-08-15T08:59","detalle":"Hilda Lorena Pintos","monto":-66000.0,"tipo":"salida"},{"id":"m033","fecha":"2024-09-04T20:59","detalle":"KAYER, LIDIA ESTHER","monto":5000.0,"tipo":"aporte"},{"id":"m034","fecha":"2024-09-05T16:01","detalle":"Erika Tamara Basso","monto":5000.0,"tipo":"aporte"},{"id":"m035","fecha":"2024-09-05T16:03","detalle":"FLORES, WALTER ALBERTO","monto":10000.0,"tipo":"aporte"},{"id":"m036","fecha":"2024-09-05T18:04","detalle":"Alfredo Fernando Ortigoza","monto":5000.0,"tipo":"aporte"},{"id":"m037","fecha":"2024-09-14T14:18","detalle":"Marcos Joel Basso","monto":5000.0,"tipo":"aporte"},{"id":"m038","fecha":"2024-09-18T21:13","detalle":"Marcos Joel Basso","monto":-86000.0,"tipo":"salida"},{"id":"m039","fecha":"2024-09-18T21:23","detalle":"Hilda Lorena Pintos","monto":5000.0,"tipo":"aporte"},{"id":"m040","fecha":"2024-09-30T23:29","detalle":"Interes mensual ganado","monto":1.85,"tipo":"interes"},{"id":"m041","fecha":"2024-10-04T06:10","detalle":"Erika Tamara Basso","monto":5000.0,"tipo":"aporte"},{"id":"m042","fecha":"2024-10-05T11:16","detalle":"De una cuenta tuya","monto":5000.0,"tipo":"aporte"},{"id":"m043","fecha":"2024-10-05T11:17","detalle":"FLORES, WALTER ALBERTO","monto":10000.0,"tipo":"aporte"},{"id":"m044","fecha":"2024-10-05T11:19","detalle":"Hilda Lorena Pintos","monto":5000.0,"tipo":"aporte"},{"id":"m045","fecha":"2024-10-05T14:35","detalle":"De una cuenta tuya","monto":5000.0,"tipo":"aporte"},{"id":"m046","fecha":"2024-10-06T09:20","detalle":"KAYER, LIDIA ESTHER","monto":5000.0,"tipo":"aporte"},{"id":"m047","fecha":"2024-10-09T06:58","detalle":"Alfredo Fernando Ortigoza","monto":5000.0,"tipo":"aporte"},{"id":"m048","fecha":"2024-10-10T13:01","detalle":"Marcos Joel Basso","monto":5000.0,"tipo":"aporte"},{"id":"m049","fecha":"2024-10-11T14:44","detalle":"Marcos Joel Basso","monto":5000.0,"tipo":"aporte"},{"id":"m050","fecha":"2024-11-01T01:19","detalle":"Erika Tamara Basso","monto":5000.0,"tipo":"aporte"},{"id":"m051","fecha":"2024-11-01T07:10","detalle":"De una cuenta tuya","monto":5000.0,"tipo":"aporte"},{"id":"m052","fecha":"2024-11-12T09:49","detalle":"KAYER, LIDIA ESTHER","monto":5000.0,"tipo":"aporte"},{"id":"m053","fecha":"2024-11-15T11:28","detalle":"FLORES, WALTER ALBERTO","monto":10000.0,"tipo":"aporte"},{"id":"m054","fecha":"2024-11-15T11:33","detalle":"Marcos Joel Basso","monto":5000.0,"tipo":"aporte"},{"id":"m055","fecha":"2024-11-29T23:30","detalle":"Interes mensual ganado","monto":3.12,"tipo":"interes"},{"id":"m056","fecha":"2024-12-02T07:33","detalle":"Erika Tamara Basso","monto":5000.0,"tipo":"aporte"},{"id":"m057","fecha":"2024-12-08T12:46","detalle":"De una cuenta tuya","monto":5000.0,"tipo":"aporte"},{"id":"m058","fecha":"2024-12-12T12:19","detalle":"Pablo Hernan Ingravo","monto":-100000.0,"tipo":"salida"},{"id":"m059","fecha":"2024-12-15T11:58","detalle":"Marcos Joel Basso","monto":5000.0,"tipo":"aporte"},{"id":"m060","fecha":"2024-12-16T09:59","detalle":"Alfredo Fernando Ortigoza","monto":5000.0,"tipo":"aporte"},{"id":"m061","fecha":"2024-12-16T14:06","detalle":"De una cuenta tuya","monto":5000.0,"tipo":"aporte"},{"id":"m062","fecha":"2024-12-16T16:04","detalle":"FLORES, WALTER ALBERTO","monto":10000.0,"tipo":"aporte"},{"id":"m063","fecha":"2024-12-17T15:17","detalle":"De una cuenta tuya","monto":10000.0,"tipo":"aporte"},{"id":"m064","fecha":"2024-12-30T09:07","detalle":"KAYER, LIDIA ESTHER","monto":5000.0,"tipo":"aporte"},{"id":"m065","fecha":"2024-12-30T23:23","detalle":"Erika Tamara Basso","monto":5000.0,"tipo":"aporte"},{"id":"m066","fecha":"2024-12-31T00:03","detalle":"Interes mensual ganado","monto":2.41,"tipo":"interes"},{"id":"m067","fecha":"2025-01-03T18:40","detalle":"Hilda Lorena Pintos","monto":5000.0,"tipo":"aporte"},{"id":"m068","fecha":"2025-01-03T20:44","detalle":"Alfredo Fernando Ortigoza","monto":5000.0,"tipo":"aporte"},{"id":"m069","fecha":"2025-01-15T20:57","detalle":"Marcos Joel Basso","monto":5000.0,"tipo":"aporte"},{"id":"m070","fecha":"2025-01-31T23:29","detalle":"Interes mensual ganado","monto":2.62,"tipo":"interes"},{"id":"m071","fecha":"2025-02-01T10:53","detalle":"Erika Tamara Basso","monto":10000.0,"tipo":"aporte"},{"id":"m072","fecha":"2025-02-01T12:51","detalle":"KAYER, LIDIA ESTHER","monto":5000.0,"tipo":"aporte"},{"id":"m073","fecha":"2025-02-11T18:09","detalle":"FLORES, WALTER ALBERTO","monto":20000.0,"tipo":"aporte"},{"id":"m074","fecha":"2025-02-11T19:04","detalle":"De una cuenta tuya","monto":8000.0,"tipo":"aporte"},{"id":"m075","fecha":"2025-02-17T15:30","detalle":"Marcos Joel Basso","monto":5000.0,"tipo":"aporte"},{"id":"m076","fecha":"2025-02-17T15:36","detalle":"Marcos Joel Basso","monto":5000.0,"tipo":"aporte"},{"id":"m077","fecha":"2025-02-17T16:05","detalle":"Alfredo Fernando Ortigoza","monto":5000.0,"tipo":"aporte"},{"id":"m078","fecha":"2025-03-01T00:19","detalle":"Interes mensual ganado","monto":3.96,"tipo":"interes"},{"id":"m079","fecha":"2025-03-01T13:25","detalle":"Erika Tamara Basso","monto":10000.0,"tipo":"aporte"},{"id":"m080","fecha":"2025-03-01T13:35","detalle":"Marcos Joel Basso","monto":5000.0,"tipo":"aporte"},{"id":"m081","fecha":"2025-03-01T14:35","detalle":"FLORES, WALTER ALBERTO","monto":10000.0,"tipo":"aporte"},{"id":"m082","fecha":"2025-03-02T10:01","detalle":"KAYER, LIDIA ESTHER","monto":5000.0,"tipo":"aporte"},{"id":"m083","fecha":"2025-03-03T08:57","detalle":"De una cuenta tuya","monto":5000.0,"tipo":"aporte"},{"id":"m084","fecha":"2025-03-03T13:35","detalle":"Alfredo Fernando Ortigoza","monto":5000.0,"tipo":"aporte"},{"id":"m085","fecha":"2025-03-30T12:32","detalle":"KAYER, LIDIA ESTHER","monto":5000.0,"tipo":"aporte"},{"id":"m086","fecha":"2025-04-01T00:18","detalle":"Interes mensual ganado","monto":6.71,"tipo":"interes"},{"id":"m087","fecha":"2025-04-01T07:53","detalle":"Erika Tamara Basso","monto":10000.0,"tipo":"aporte"},{"id":"m088","fecha":"2025-04-01T10:59","detalle":"FLORES, WALTER ALBERTO","monto":10000.0,"tipo":"aporte"},{"id":"m089","fecha":"2025-04-03T22:15","detalle":"Marcos Joel Basso","monto":6000.0,"tipo":"aporte"},{"id":"m090","fecha":"2025-04-03T22:31","detalle":"Hilda Lorena Pintos","monto":5000.0,"tipo":"aporte"},{"id":"m091","fecha":"2025-04-06T12:35","detalle":"De una cuenta tuya","monto":5000.0,"tipo":"aporte"},{"id":"m092","fecha":"2025-04-07T19:47","detalle":"Alfredo Fernando Ortigoza","monto":5000.0,"tipo":"aporte"},{"id":"m093","fecha":"2025-04-18T13:55","detalle":"Petrona De La Cruz Contreras","monto":5000.0,"tipo":"aporte"},{"id":"m094","fecha":"2025-04-26T11:22","detalle":"De una cuenta tuya","monto":5000.0,"tipo":"aporte"},{"id":"m095","fecha":"2025-05-01T01:11","detalle":"Interes mensual ganado","monto":8.55,"tipo":"interes"},{"id":"m096","fecha":"2025-05-01T18:09","detalle":"Erika Tamara Basso","monto":10000.0,"tipo":"aporte"},{"id":"m097","fecha":"2025-05-01T19:18","detalle":"KAYER, LIDIA ESTHER","monto":5000.0,"tipo":"aporte"},{"id":"m098","fecha":"2025-05-01T22:14","detalle":"FLORES, WALTER ALBERTO","monto":10000.0,"tipo":"aporte"},{"id":"m099","fecha":"2025-05-01T22:15","detalle":"Marcos Joel Basso","monto":5000.0,"tipo":"aporte"},{"id":"m100","fecha":"2025-05-02T08:37","detalle":"Hilda Lorena Pintos","monto":5000.0,"tipo":"aporte"},{"id":"m101","fecha":"2025-05-02T08:47","detalle":"Alfredo Fernando Ortigoza","monto":5000.0,"tipo":"aporte"},{"id":"m102","fecha":"2025-05-30T22:54","detalle":"Devengado Cuentas Vista","monto":10.78,"tipo":"interes"},{"id":"m103","fecha":"2025-05-30T23:04","detalle":"Erika Tamara Basso","monto":10000.0,"tipo":"aporte"},{"id":"m104","fecha":"2025-06-02T10:41","detalle":"KAYER, LIDIA ESTHER","monto":5000.0,"tipo":"aporte"},{"id":"m105","fecha":"2025-06-02T10:46","detalle":"De una cuenta tuya","monto":5000.0,"tipo":"aporte"},{"id":"m106","fecha":"2025-06-03T20:09","detalle":"FLORES, WALTER ALBERTO","monto":10000.0,"tipo":"aporte"},{"id":"m107","fecha":"2025-06-03T20:39","detalle":"Alfredo Fernando Ortigoza","monto":5000.0,"tipo":"aporte"},{"id":"m108","fecha":"2025-06-05T13:27","detalle":"De una cuenta tuya","monto":5000.0,"tipo":"aporte"},{"id":"m109","fecha":"2025-06-13T20:57","detalle":"Marcos Joel Basso","monto":5000.0,"tipo":"aporte"},{"id":"m110","fecha":"2025-07-01T02:06","detalle":"Interes mensual ganado","monto":12.31,"tipo":"interes"},{"id":"m111","fecha":"2025-07-01T12:43","detalle":"Erika Tamara Basso","monto":10000.0,"tipo":"aporte"},{"id":"m112","fecha":"2025-07-01T20:00","detalle":"De una cuenta tuya","monto":10000.0,"tipo":"aporte"},{"id":"m113","fecha":"2025-07-01T20:01","detalle":"De una cuenta tuya","monto":5000.0,"tipo":"aporte"},{"id":"m114","fecha":"2025-07-02T10:12","detalle":"FLORES, WALTER ALBERTO","monto":10000.0,"tipo":"aporte"},{"id":"m115","fecha":"2025-07-30T19:48","detalle":"Marcos Joel Basso","monto":10000.0,"tipo":"aporte"},{"id":"m116","fecha":"2025-07-30T19:57","detalle":"Alfredo Fernando Ortigoza","monto":10000.0,"tipo":"aporte"},{"id":"m117","fecha":"2025-07-30T20:04","detalle":"De una cuenta tuya","monto":10000.0,"tipo":"aporte"},{"id":"m118","fecha":"2025-08-01T01:11","detalle":"Interes mensual ganado","monto":14.46,"tipo":"interes"},{"id":"m119","fecha":"2025-08-01T09:45","detalle":"BASSO, ERIKA TAMARA","monto":10000.0,"tipo":"aporte"},{"id":"m120","fecha":"2025-08-01T12:04","detalle":"KAYER, LIDIA ESTHER","monto":5000.0,"tipo":"aporte"},{"id":"m121","fecha":"2025-08-07T16:57","detalle":"FLORES, WALTER ALBERTO","monto":10000.0,"tipo":"aporte"},{"id":"m122","fecha":"2025-08-30T01:08","detalle":"Interes mensual ganado","monto":16.65,"tipo":"interes"},{"id":"m123","fecha":"2025-08-30T10:14","detalle":"Erika Tamara Basso","monto":10000.0,"tipo":"aporte"},{"id":"m124","fecha":"2025-08-30T12:02","detalle":"Alfredo Fernando Ortigoza","monto":5000.0,"tipo":"aporte"},{"id":"m125","fecha":"2025-09-02T12:21","detalle":"KAYER, LIDIA ESTHER","monto":5000.0,"tipo":"aporte"},{"id":"m126","fecha":"2025-09-02T12:23","detalle":"FLORES, WALTER ALBERTO","monto":10000.0,"tipo":"aporte"},{"id":"m127","fecha":"2025-09-02T12:47","detalle":"De una cuenta tuya","monto":5000.0,"tipo":"aporte"},{"id":"m128","fecha":"2025-10-01T00:05","detalle":"Erika Tamara Basso","monto":10000.0,"tipo":"aporte"},{"id":"m129","fecha":"2025-10-01T00:39","detalle":"Interes mensual ganado","monto":17.02,"tipo":"interes"},{"id":"m130","fecha":"2025-10-01T20:07","detalle":"KAYER, LIDIA ESTHER","monto":10000.0,"tipo":"aporte"},{"id":"m131","fecha":"2025-10-09T10:05","detalle":"De una cuenta tuya","monto":5000.0,"tipo":"aporte"},{"id":"m132","fecha":"2025-10-09T15:01","detalle":"Marcos Joel Basso","monto":15000.0,"tipo":"aporte"},{"id":"m133","fecha":"2025-10-09T20:13","detalle":"Marcos Joel Basso","monto":15000.0,"tipo":"aporte"},{"id":"m134","fecha":"2025-11-01T01:40","detalle":"Interes mensual ganado","monto":19.51,"tipo":"interes"},{"id":"m135","fecha":"2025-11-01T14:53","detalle":"Erika Tamara Basso","monto":10000.0,"tipo":"aporte"},{"id":"m136","fecha":"2025-11-16T10:09","detalle":"KAYER, LIDIA ESTHER","monto":10000.0,"tipo":"aporte"},{"id":"m137","fecha":"2025-11-18T13:06","detalle":"Marcos Joel Basso","monto":10000.0,"tipo":"aporte"},{"id":"m138","fecha":"2025-11-24T13:35","detalle":"Hilda Lorena Pintos","monto":-500000.0,"tipo":"salida"},{"id":"m139","fecha":"2025-11-29T00:17","detalle":"Interes mensual ganado","monto":12.49,"tipo":"interes"},{"id":"m140","fecha":"2025-11-30T00:38","detalle":"Erika Tamara Basso","monto":15000.0,"tipo":"aporte"},{"id":"m141","fecha":"2025-12-02T15:56","detalle":"FLORES, WALTER ALBERTO","monto":20000.0,"tipo":"aporte"},{"id":"m142","fecha":"2025-12-03T20:03","detalle":"Marcos Joel Basso","monto":10000.0,"tipo":"aporte"},{"id":"m143","fecha":"2025-12-03T20:04","detalle":"Marcos Joel Basso","monto":10000.0,"tipo":"aporte"},{"id":"m144","fecha":"2025-12-04T22:31","detalle":"De una cuenta tuya","monto":10000.0,"tipo":"aporte"},{"id":"m145","fecha":"2025-12-31T00:45","detalle":"Interes mensual ganado","monto":3.22,"tipo":"interes"},{"id":"m146","fecha":"2025-12-31T10:54","detalle":"Erika Tamara Basso","monto":15000.0,"tipo":"aporte"},{"id":"m147","fecha":"2026-01-05T10:12","detalle":"De una cuenta tuya","monto":20000.0,"tipo":"aporte"},{"id":"m148","fecha":"2026-01-15T22:18","detalle":"Marcos Joel Basso","monto":10000.0,"tipo":"aporte"},{"id":"m149","fecha":"2026-01-16T00:15","detalle":"FLORES, WALTER ALBERTO","monto":10000.0,"tipo":"aporte"},{"id":"m150","fecha":"2026-01-31T08:51","detalle":"Erika Tamara Basso","monto":10000.0,"tipo":"aporte"},{"id":"m151","fecha":"2026-01-31T22:05","detalle":"KAYER, LIDIA ESTHER","monto":10000.0,"tipo":"aporte"},{"id":"m152","fecha":"2026-02-18T21:43","detalle":"Marcos Joel Basso","monto":10000.0,"tipo":"aporte"},{"id":"m153","fecha":"2026-02-27T23:59","detalle":"Interes mensual ganado","monto":6.06,"tipo":"interes"},{"id":"m154","fecha":"2026-02-28T14:10","detalle":"Erika Tamara Basso","monto":15000.0,"tipo":"aporte"},{"id":"m155","fecha":"2026-03-10T11:19","detalle":"De una cuenta tuya","monto":10000.0,"tipo":"aporte"},{"id":"m156","fecha":"2026-03-10T11:21","detalle":"Marcos Joel Basso","monto":10000.0,"tipo":"aporte"},{"id":"m157","fecha":"2026-03-15T13:34","detalle":"Marcos Joel Basso","monto":10000.0,"tipo":"aporte"},{"id":"m158","fecha":"2026-03-31T23:02","detalle":"Pago de Interes","monto":8.43,"tipo":"interes"},{"id":"m159","fecha":"2026-04-01T14:49","detalle":"FLORES, WALTER ALBERTO","monto":20000.0,"tipo":"aporte"},{"id":"m160","fecha":"2026-04-01T16:52","detalle":"De una cuenta tuya","monto":10000.0,"tipo":"aporte"},{"id":"m161","fecha":"2026-04-01T19:52","detalle":"KAYER, LIDIA ESTHER","monto":10000.0,"tipo":"aporte"},{"id":"m162","fecha":"2026-04-01T23:40","detalle":"Erika Tamara Basso","monto":15000.0,"tipo":"aporte"},{"id":"m163","fecha":"2026-05-01T00:27","detalle":"Erika Tamara Basso","monto":15000.0,"tipo":"aporte"},{"id":"m164","fecha":"2026-05-01T03:21","detalle":"Interes mensual ganado","monto":10.75,"tipo":"interes"},{"id":"m165","fecha":"2026-05-05T16:06","detalle":"KAYER, LIDIA ESTHER","monto":10000.0,"tipo":"aporte"},{"id":"m166","fecha":"2026-05-13T12:14","detalle":"Marcos Joel Basso","monto":10000.0,"tipo":"aporte"},{"id":"m167","fecha":"2026-05-13T12:22","detalle":"FLORES, WALTER ALBERTO","monto":10000.0,"tipo":"aporte"},{"id":"m168","fecha":"2026-05-18T11:26","detalle":"De una cuenta tuya","monto":10000.0,"tipo":"aporte"},{"id":"m169","fecha":"2026-05-30T02:53","detalle":"Interes mensual ganado","monto":12.92,"tipo":"interes"},{"id":"m170","fecha":"2026-05-31T17:33","detalle":"KAYER, LIDIA ESTHER","monto":10000.0,"tipo":"aporte"},{"id":"m171","fecha":"2026-06-01T10:28","detalle":"De una cuenta tuya","monto":10000.0,"tipo":"aporte"},{"id":"m172","fecha":"2026-06-01T19:07","detalle":"Erika Tamara Basso","monto":15000.0,"tipo":"aporte"},{"id":"m173","fecha":"2026-07-01T03:32","detalle":"Interes mensual ganado","monto":14.46,"tipo":"interes"},{"id":"m174","fecha":"2026-07-02T14:28","detalle":"Erika Tamara Basso","monto":15000.0,"tipo":"aporte"},{"id":"m175","fecha":"2026-07-05T14:36","detalle":"De una cuenta tuya","monto":10000.0,"tipo":"aporte"},{"id":"m176","fecha":"2026-08-01T00:00","detalle":"Erika Tamara Basso","monto":15000.0,"tipo":"aporte"},{"id":"m177","fecha":"2026-08-01T02:48","detalle":"Interes mensual ganado","monto":15.84,"tipo":"interes"},{"id":"m178","fecha":"2026-08-02T16:55","detalle":"KAYER, LIDIA ESTHER","monto":10000.0,"tipo":"aporte"}]</script>
+
+</body>
+</html>
