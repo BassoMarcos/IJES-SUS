@@ -601,6 +601,13 @@ h1,h2,h3{margin:0;text-wrap:balance}
   el("importInput").addEventListener("change",function(e){ if(e.target.files[0]) importJson(e.target.files[0]); e.target.value=""; });
   initTheme();
   render();
+
+  // Service worker: permite que la app funcione sin internet (necesario para el APK)
+  if("serviceWorker" in navigator){
+    window.addEventListener("load",function(){
+      navigator.serviceWorker.register("sw.js").catch(function(){});
+    });
+  }
 })();
 </script>
 

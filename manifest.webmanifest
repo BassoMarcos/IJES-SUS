@@ -1,14 +1,19 @@
 {
+  "id": "/IJES-SUS/",
   "name": "Caja IJES SUBS",
   "short_name": "Caja IJES",
   "description": "Caja de la iglesia · gestión de movimientos",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
+  "orientation": "portrait",
   "background_color": "#11160f",
   "theme_color": "#1a211a",
+  "lang": "es-AR",
+  "dir": "ltr",
   "icons": [
     {"src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
-    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"}
+    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+    {"src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
   ]
 }
