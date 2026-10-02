@@ -1,5 +1,5 @@
 // Service worker de la Caja IJES SUBS — cachea la app para uso sin internet.
-const CACHE = "caja-ijes-v1";
+const CACHE = "caja-ijes-v2";
 const ASSETS = [
   "./",
   "./index.html",
@@ -27,6 +27,8 @@ self.addEventListener("activate", (e) => {
 // cuando hay internet, y funciona igual cuando no lo hay.
 self.addEventListener("fetch", (e) => {
   if (e.request.method !== "GET") return;
+  // Nunca cachear las llamadas a la API de datos (JSONBin): siempre a la red.
+  if (e.request.url.indexOf("jsonbin.io") !== -1) return;
   e.respondWith(
     fetch(e.request)
       .then((resp) => {

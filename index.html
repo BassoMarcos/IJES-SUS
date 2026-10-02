@@ -210,9 +210,15 @@ h1,h2,h3{margin:0;text-wrap:balance}
   var MESES=["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
   var AV_COLORS=["#6b8e9e","#9e6b8e","#8e9e6b","#9e8a6b","#6b9e86","#866b9e","#9e6b6b","#6b9e9e"];
 
+  // ---- sincronización en la nube (JSONBin) ----
+  var BIN_ID = "6abfff09ac6210605a0d7ea5";
+  var BIN_KEY = "$2a$10$d.PEuuxgVP5ys.mQsJEJBuwZZpt7nc8n7KnIpgFt6IziS88WozCFu";
+  var BIN_URL = "https://api.jsonbin.io/v3/b/" + BIN_ID;
+  var cloudReady = false;   // true cuando ya cargamos (o intentamos) desde la nube
+  var syncTimer = null;
+
   // ---- estado ----
-  // Versión local: si ya hay datos guardados en esta PC, esos mandan.
-  // La primera vez (sin datos guardados) cargamos los movimientos iniciales embebidos.
+  // Arranca con lo guardado localmente (rápido); luego se reemplaza con lo de la nube.
   var state = [];
   try{ var ls=localStorage.getItem("caja_ijes"); if(ls) state=JSON.parse(ls)||[]; }catch(e){}
   if(!state.length){
@@ -310,12 +316,55 @@ h1,h2,h3{margin:0;text-wrap:balance}
   function escapeHtml(s){ return (s||"").replace(/[&<>"]/g,function(c){
     return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
 
-  // ---- persistencia (versión local: guarda en este navegador) ----
+  // ---- persistencia: local (instantánea) + nube (JSONBin) ----
   function saveLocal(){ try{ localStorage.setItem("caja_ijes", JSON.stringify(state)); }catch(e){} }
+
   function persist(){
     saveLocal();
-    setSaver("Guardado en esta PC ✓", false);
+    // guarda en la nube con un pequeño retardo para agrupar cambios seguidos
+    setSaver("Guardando…", false);
+    if(syncTimer) clearTimeout(syncTimer);
+    syncTimer = setTimeout(cloudSave, 700);
   }
+
+  function cloudSave(){
+    fetch(BIN_URL, {
+      method: "PUT",
+      headers: { "Content-Type":"application/json", "X-Master-Key": BIN_KEY },
+      body: JSON.stringify({ movimientos: state })
+    }).then(function(r){
+      if(!r.ok) throw new Error("http "+r.status);
+      setSaver("Guardado y sincronizado ✓", false);
+    }).catch(function(){
+      setSaver("Guardado en este dispositivo · sin conexión, se sincroniza al reconectar", true);
+    });
+  }
+
+  function cloudLoad(cb){
+    setSaver("Cargando…", false);
+    fetch(BIN_URL + "/latest", {
+      headers: { "X-Master-Key": BIN_KEY }
+    }).then(function(r){
+      if(!r.ok) throw new Error("http "+r.status);
+      return r.json();
+    }).then(function(j){
+      var rec = (j && j.record) ? j.record : j;
+      var arr = rec && rec.movimientos ? rec.movimientos : (Array.isArray(rec)?rec:null);
+      if(Array.isArray(arr)){
+        // si la nube está vacía pero tenemos datos locales, subimos los locales (primer uso)
+        if(arr.length===0 && state.length>0){ cloudReady=true; cloudSave(); }
+        else { state = arr; saveLocal(); }
+      }
+      cloudReady = true;
+      setSaver("Sincronizado ✓", false);
+      if(cb) cb();
+    }).catch(function(){
+      cloudReady = true; // seguimos con lo local
+      setSaver("Sin conexión · mostrando datos de este dispositivo", true);
+      if(cb) cb();
+    });
+  }
+
   function setSaver(msg,isErr){ var s=el("saver"); s.textContent=msg; s.className="saver"+(isErr?" err":""); }
 
   // ---- formulario ----
@@ -600,9 +649,15 @@ h1,h2,h3{margin:0;text-wrap:balance}
   el("backupBtn").addEventListener("click",exportJson);
   el("importInput").addEventListener("change",function(e){ if(e.target.files[0]) importJson(e.target.files[0]); e.target.value=""; });
   initTheme();
-  render();
+  render();                 // muestra enseguida lo local
+  cloudLoad(function(){ render(); });  // trae de la nube y re-dibuja
 
-  // Service worker: permite que la app funcione sin internet (necesario para el APK)
+  // al volver a la app (cambiar de pestaña/volver del fondo) refresca desde la nube
+  document.addEventListener("visibilitychange", function(){
+    if(!document.hidden && cloudReady){ cloudLoad(function(){ render(); }); }
+  });
+
+  // Service worker: permite que la app funcione sin internet
   if("serviceWorker" in navigator){
     window.addEventListener("load",function(){
       navigator.serviceWorker.register("sw.js").catch(function(){});
