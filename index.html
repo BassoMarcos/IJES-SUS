@@ -678,6 +678,16 @@ h1,h2,h3{margin:0;text-wrap:balance}
     if(!document.hidden && cloudReady){ cloudLoad(function(){ render(); }); }
   });
 
+  // refresco automático cada 20s mientras la app está a la vista,
+  // así siempre ves lo último sin hacer nada. No refresca si hay un
+  // formulario abierto (para no interrumpir una carga en curso).
+  setInterval(function(){
+    if(document.hidden) return;
+    if(document.getElementById("backdrop")) return; // formulario/ informe abierto
+    if(syncTimer) return;                            // hay un guardado pendiente
+    if(cloudReady){ cloudLoad(function(){ render(); }); }
+  }, 20000);
+
   // Service worker: permite que la app funcione sin internet
   if("serviceWorker" in navigator){
     window.addEventListener("load",function(){
