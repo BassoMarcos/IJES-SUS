@@ -316,15 +316,26 @@ h1,h2,h3{margin:0;text-wrap:balance}
   function escapeHtml(s){ return (s||"").replace(/[&<>"]/g,function(c){
     return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
 
-  // ---- persistencia: local (instantánea) + nube (JSONBin) ----
+  // ---- persistencia: la nube (JSONBin) es la fuente de verdad ----
+  // Regla: solo se puede modificar si hay conexión a la nube. Sin internet,
+  // la app queda en "solo lectura" para que nunca se pisen datos entre dispositivos.
+  var online = false;
   function saveLocal(){ try{ localStorage.setItem("caja_ijes", JSON.stringify(state)); }catch(e){} }
+
+  // Habilita o bloquea los controles de edición según haya conexión
+  function setOnline(v){
+    online = v;
+    var add = el("addBtn"), imp = el("importInput");
+    if(add){ add.disabled = !v; add.style.opacity = v?"1":".4"; add.style.pointerEvents = v?"auto":"none"; }
+    var impLabel = imp ? imp.parentNode : null;
+    if(impLabel){ impLabel.style.opacity = v?"1":".4"; impLabel.style.pointerEvents = v?"auto":"none"; }
+  }
 
   function persist(){
     saveLocal();
-    // guarda en la nube con un pequeño retardo para agrupar cambios seguidos
     setSaver("Guardando…", false);
     if(syncTimer) clearTimeout(syncTimer);
-    syncTimer = setTimeout(cloudSave, 700);
+    syncTimer = setTimeout(cloudSave, 500);
   }
 
   function cloudSave(){
@@ -334,14 +345,17 @@ h1,h2,h3{margin:0;text-wrap:balance}
       body: JSON.stringify({ movimientos: state })
     }).then(function(r){
       if(!r.ok) throw new Error("http "+r.status);
+      setOnline(true);
       setSaver("Guardado y sincronizado ✓", false);
     }).catch(function(){
-      setSaver("Guardado en este dispositivo · sin conexión, se sincroniza al reconectar", true);
+      // perdimos conexión: bloqueamos edición y avisamos
+      setOnline(false);
+      setSaver("⚠ Sin conexión — no se pudo guardar. Reconectate y reintentá.", true);
     });
   }
 
   function cloudLoad(cb){
-    setSaver("Cargando…", false);
+    setSaver("Conectando…", false);
     fetch(BIN_URL + "/latest", {
       headers: { "X-Master-Key": BIN_KEY }
     }).then(function(r){
@@ -351,24 +365,30 @@ h1,h2,h3{margin:0;text-wrap:balance}
       var rec = (j && j.record) ? j.record : j;
       var arr = rec && rec.movimientos ? rec.movimientos : (Array.isArray(rec)?rec:null);
       if(Array.isArray(arr)){
-        // si la nube está vacía pero tenemos datos locales, subimos los locales (primer uso)
-        if(arr.length===0 && state.length>0){ cloudReady=true; cloudSave(); }
+        if(arr.length===0 && state.length>0){ state = state; cloudReady=true; setOnline(true); cloudSave(); }
         else { state = arr; saveLocal(); }
       }
       cloudReady = true;
+      setOnline(true);
       setSaver("Sincronizado ✓", false);
       if(cb) cb();
     }).catch(function(){
-      cloudReady = true; // seguimos con lo local
-      setSaver("Sin conexión · mostrando datos de este dispositivo", true);
+      cloudReady = true;
+      setOnline(false);   // sin nube -> solo lectura
+      setSaver("⚠ Sin conexión — solo lectura. Conectate a internet para cargar o editar.", true);
       if(cb) cb();
     });
   }
+
+  // Reintenta conectar cuando el navegador recupera la red
+  window.addEventListener("online", function(){ cloudLoad(function(){ render(); }); });
+  window.addEventListener("offline", function(){ setOnline(false); setSaver("⚠ Sin conexión — solo lectura.", true); });
 
   function setSaver(msg,isErr){ var s=el("saver"); s.textContent=msg; s.className="saver"+(isErr?" err":""); }
 
   // ---- formulario ----
   function openForm(id){
+    if(!online){ setSaver("⚠ Sin conexión — conectate a internet para cargar o editar.", true); return; }
     editingId = id||null;
     var r = id ? state.filter(function(x){return x.id===id;})[0] : null;
     var now=new Date(); now.setMinutes(now.getMinutes()-now.getTimezoneOffset());
@@ -649,8 +669,9 @@ h1,h2,h3{margin:0;text-wrap:balance}
   el("backupBtn").addEventListener("click",exportJson);
   el("importInput").addEventListener("change",function(e){ if(e.target.files[0]) importJson(e.target.files[0]); e.target.value=""; });
   initTheme();
+  setOnline(false);         // arranca bloqueado hasta confirmar conexión a la nube
   render();                 // muestra enseguida lo local
-  cloudLoad(function(){ render(); });  // trae de la nube y re-dibuja
+  cloudLoad(function(){ render(); });  // trae de la nube, habilita edición y re-dibuja
 
   // al volver a la app (cambiar de pestaña/volver del fondo) refresca desde la nube
   document.addEventListener("visibilitychange", function(){
