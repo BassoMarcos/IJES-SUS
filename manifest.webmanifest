@@ -1,8 +1,8 @@
 {
   "id": "/IJES-SUS/",
-  "name": "Caja IJES SUBS",
-  "short_name": "Caja IJES",
-  "description": "Caja de la iglesia · gestión de movimientos",
+  "name": "Finanzas IJES",
+  "short_name": "Finanzas IJES",
+  "description": "Gestión financiera de la iglesia: suscriptores y administración",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
@@ -12,8 +12,23 @@
   "lang": "es-AR",
   "dir": "ltr",
   "icons": [
-    {"src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
-    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
-    {"src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
   ]
 }
