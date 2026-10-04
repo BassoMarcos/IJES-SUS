@@ -43,8 +43,8 @@ h1,h2,h3{margin:0;text-wrap:balance}
 .wrap{max-width:720px;margin:0 auto;padding-inline:16px}
 
 /* ===== LOGIN / HOME ===== */
-.home{min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;
-  padding:40px 16px calc(40px + env(safe-area-inset-bottom,0px));gap:22px;text-align:center}
+.home{min-height:100vh;min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:max(40px,env(safe-area-inset-top,0px)) 16px calc(40px + env(safe-area-inset-bottom,0px));gap:22px;text-align:center}
 .home .logo{height:110px;width:auto}
 :root:not([data-theme="dark"]) .home .logo{filter:invert(1) brightness(.28)}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .home .logo{filter:none}}
@@ -381,6 +381,7 @@ h1,h2,h3{margin:0;text-wrap:balance}
   function showHome(){
     sec=null; el("app").hidden=true; el("home").hidden=false;
     el("pwBox").hidden=true; el("homeCards").hidden=false;
+    window.scrollTo(0,0);
   }
   function askPass(which){
     pendingSec=which;
@@ -397,6 +398,7 @@ h1,h2,h3{margin:0;text-wrap:balance}
   function enterSection(which){
     sec=which;
     el("home").hidden=true; el("app").hidden=false;
+    window.scrollTo(0,0);
     try{ sessionStorage.setItem("ijes_sec",which); }catch(e){}
     buildSectionChrome();
     setOnline(false);

@@ -1,5 +1,5 @@
 // Service worker de la Caja IJES SUBS — cachea la app para uso sin internet.
-const CACHE = "caja-ijes-v5";
+const CACHE = "caja-ijes-v6";
 const ASSETS = [
   "./",
   "./index.html",
