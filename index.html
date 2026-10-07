@@ -288,8 +288,8 @@ h1,h2,h3{margin:0;text-wrap:balance}
      CONFIGURACIÓN  (editá acá contraseñas, fondos y categorías)
      ========================================================= */
   var PASS = {
-    subs:  "ijes2024",      // contraseña de IJES Suscriptores
-    admin: "admin2024"      // contraseña de Administración General
+    subs:  "ijes4125",      // contraseña de IJES Suscriptores
+    admin: "adminijes4125"      // contraseña de Administración General
   };
   // Fondos / cajas de la administración
   var FONDOS = ["General","Construcción","Misiones","Ayuda social","Caja chica"];
@@ -515,11 +515,16 @@ h1,h2,h3{margin:0;text-wrap:balance}
     var list=el("list"); 
     var fs=fondoSaldos();
     var t=totalsAdmin(DATA.admin);
-    // resumen por categoría (mes actual con datos)
+    var saldoSubs=totalsSubs(DATA.subs).saldo;
+    var totalIglesia=t.saldo + saldoSubs;
     var html='<div style="padding-block:14px">';
-    html+='<div class="fcard" style="margin-bottom:12px"><div class="fn">Saldo general</div><div class="fs tnum">'+money(t.saldo)+'</div>'+
+    html+='<div class="fcard" style="margin-bottom:12px;border-color:var(--admin)"><div class="fn">Total general de la iglesia</div><div class="fs tnum" style="color:var(--admin-ink)">'+money(totalIglesia)+'</div>'+
+          '<div class="fd">Administración '+money0(t.saldo)+' · Suscriptores '+money0(saldoSubs)+'</div></div>';
+    html+='<div class="fcard" style="margin-bottom:12px"><div class="fn">Saldo administración</div><div class="fs tnum">'+money(t.saldo)+'</div>'+
           '<div class="fd">Ingresos '+money0(t.ingreso)+' · Egresos '+money0(t.egreso)+'</div></div>';
-    html+='<div style="font-size:.72rem;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-soft);margin:6px 2px 8px">Saldo por fondo</div>';
+    html+='<div class="fcard" style="margin-bottom:12px"><div class="fn">Caja IJES Suscriptores</div><div class="fs tnum" style="color:var(--accent-ink)">'+money(saldoSubs)+'</div>'+
+          '<div class="fd">Aportes de los colaboradores (cuenta separada)</div></div>';
+    html+='<div style="font-size:.72rem;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-soft);margin:6px 2px 8px">Saldo por fondo (administración)</div>';
     html+='<div class="fondos" style="padding:0">';
     FONDOS.forEach(function(f){ html+='<div class="fcard"><div class="fn">'+f+'</div><div class="fs tnum">'+money(fs[f]||0)+'</div></div>'; });
     html+='</div></div>';
