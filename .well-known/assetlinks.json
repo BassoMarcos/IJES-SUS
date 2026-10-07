@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "io.github.bassomarcos.twa",
+        "sha256_cert_fingerprints": ["66:CD:5A:94:DA:9E:3D:70:DE:EA:67:0A:BA:9A:59:B2:E8:76:D7:09:B9:3E:0F:B3:BC:CF:A6:17:05:3D:9E:79"]
+      }
+    }]
